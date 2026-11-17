@@ -21,13 +21,17 @@ type SetStatusOptions = ViewOptions &
         pauseActivity?: boolean
     }
 
-function resolveMessage(message: string): string {
+function resolveMessage(message: string | undefined): string | undefined {
+    if (message === undefined) return undefined
     const trimmed = message.trim()
     const length = [...trimmed].length
     if (length < 1 || length > MAX_MESSAGE_LENGTH) {
         throw new CliError(
             'INVALID_OPTIONS',
             `The message must be 1 to ${MAX_MESSAGE_LENGTH} characters`,
+            length < 1
+                ? ['To set only an emoji, leave the message out: --emoji <emoji>']
+                : undefined,
         )
     }
     return trimmed
@@ -103,7 +107,8 @@ function sameEffect(returned: UserStatus['effects']['pauseNotifications'], sent:
 
 function sameStatus(returned: UserStatus, sent: UserStatusArgs): boolean {
     return (
-        returned.message === sent.message &&
+        // An emoji-only status may come back with its message null or left out.
+        (returned.message ?? null) === (sent.message ?? null) &&
         (returned.emoji || null) === sent.emoji &&
         sameEffect(returned.effects.pauseNotifications, sent.effects?.pauseNotifications) &&
         sameEffect(returned.effects.pauseActivity, sent.effects?.pauseActivity) &&
@@ -116,7 +121,8 @@ export async function setStatus(
     options: SetStatusOptions,
     command: Command,
 ): Promise<void> {
-    if (message === undefined) {
+    // A status needs a message, an emoji or both.
+    if (message === undefined && options.emoji === undefined) {
         failWithUsage(command)
     }
     const text = resolveMessage(message)
@@ -124,7 +130,7 @@ export async function setStatus(
     const activeUntil = resolveExpiry(options)
 
     const args: UserStatusArgs = {
-        message: text,
+        message: text ?? null,
         emoji: emoji ?? null,
         activeUntil: activeUntil ?? null,
         effects: {
@@ -139,7 +145,7 @@ export async function setStatus(
             return
         }
         printDryRun('set status', {
-            Message: text,
+            Message: text ?? 'cleared',
             Emoji: emoji ?? 'cleared',
             Until: activeUntil ? formatDateTime(activeUntil) : 'cleared',
             'Pause notifications': options.pauseNotifications ? 'yes' : 'cleared',

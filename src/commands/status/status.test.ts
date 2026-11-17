@@ -121,6 +121,26 @@ describe('td status', () => {
             )
         })
 
+        // A status can be just an emoji, which Todoist returns with a null or absent message.
+        it.each([
+            ['null', { message: null, emoji: '🎯', effects: {} }, '🎯'],
+            ['absent', { emoji: '🎯', effects: {} }, '🎯'],
+            [
+                'null, with a pause',
+                {
+                    message: null,
+                    emoji: '🎯',
+                    effects: { pauseNotifications: { scope: { mode: 'all' } } },
+                },
+                '🎯 (notifications paused)',
+            ],
+        ])('prints an emoji-only status whose message is %s', async (_name, status, expected) => {
+            apiMocks.fetchUserStatus.mockResolvedValue(status)
+            const spy = captureConsole('log')
+            await run('view')
+            expect(logged(spy)).toBe(expected)
+        })
+
         it('says so when there is no status', async () => {
             apiMocks.fetchUserStatus.mockResolvedValue(null)
             const spy = captureConsole('log')
@@ -370,6 +390,68 @@ describe('td status', () => {
             })
         })
 
+        describe('with only an emoji', () => {
+            it('sends a null message and prints the emoji', async () => {
+                const spy = captureConsole('log')
+                await run('set', '--emoji', '🤒', '--for', '1d', '--pause-activity')
+                expect(apiMocks.writeUserStatus).toHaveBeenCalledWith({
+                    message: null,
+                    emoji: '🤒',
+                    activeUntil: new Date('2026-10-15T12:00:00.000Z'),
+                    effects: { pauseNotifications: null, pauseActivity: {} },
+                })
+                expect(logged(spy)).toBe(
+                    'Status set: 🤒 (until Oct 15, 2026, 12:00 PM, activity paused)',
+                )
+            })
+
+            it('accepts the status when Todoist leaves the message out', async () => {
+                apiMocks.writeUserStatus.mockResolvedValue({ emoji: '🤒', effects: {} })
+                const spy = captureConsole('log')
+                await run('set', '--emoji', '🤒')
+                expect(logged(spy)).toBe('Status set: 🤒')
+            })
+
+            it('prints a null message in JSON', async () => {
+                const spy = captureConsole('log')
+                await run('set', '--emoji', '🤒', '--json')
+                expect(JSON.parse(logged(spy))).toEqual({
+                    status: { message: null, emoji: '🤒', activeUntil: null, effects: {} },
+                })
+            })
+
+            it('previews the message as cleared on --dry-run', async () => {
+                const spy = captureConsole('log')
+                await run('set', '--emoji', '🤒', '--dry-run')
+                expect(apiMocks.writeUserStatus).not.toHaveBeenCalled()
+                const out = logged(spy)
+                expect(out).toContain('Message: cleared')
+                expect(out).toContain('Emoji: 🤒')
+            })
+
+            it('previews a null message on --dry-run --json', async () => {
+                const spy = captureConsole('log')
+                await run('set', '--emoji', '🤒', '--dry-run', '--json')
+                expect(JSON.parse(logged(spy)).args).toMatchObject({ message: null, emoji: '🤒' })
+            })
+
+            it('rejects an explicitly empty message, pointing at leaving it out', async () => {
+                captureConsole('log')
+                const error = await run('set', '', '--emoji', '🤒').catch((e) => e)
+                expect(error.code).toBe('INVALID_OPTIONS')
+                expect(error.hints.join(' ')).toContain('leave the message out')
+                expect(apiMocks.writeUserStatus).not.toHaveBeenCalled()
+            })
+
+            it('fails when Todoist drops the message that was sent with the emoji', async () => {
+                apiMocks.writeUserStatus.mockResolvedValue({ emoji: '🎯', effects: {} })
+                captureConsole('log')
+                await expect(run('set', 'Away', '--emoji', '🎯')).rejects.toMatchObject({
+                    code: 'INVALID_STATE',
+                })
+            })
+        })
+
         it('describes --pause-notifications as honoured only by apps that read the status', () => {
             const program = createTestProgram(registerStatusCommand)
             const set = program.commands
@@ -437,17 +519,22 @@ describe('td status', () => {
         })
     })
 
-    describe('set without a message', () => {
+    describe('set without a message or an emoji', () => {
         afterEach(() => {
             resetGlobalArgs()
         })
 
-        it('stops with usage instead of setting anything', async () => {
-            captureConsole('log')
-            captureConsole('error')
-            await expect(run('set')).rejects.toMatchObject({ code: 'commander.help' })
-            expect(apiMocks.writeUserStatus).not.toHaveBeenCalled()
-        })
+        it.each([[[]], [['--for', '2h', '--pause-notifications']]])(
+            'stops with usage instead of setting anything for %j',
+            async (flags) => {
+                captureConsole('log')
+                captureConsole('error')
+                await expect(run('set', ...flags)).rejects.toMatchObject({
+                    code: 'commander.help',
+                })
+                expect(apiMocks.writeUserStatus).not.toHaveBeenCalled()
+            },
+        )
 
         it('reports MISSING_ARGUMENT under --json', async () => {
             const originalArgv = process.argv

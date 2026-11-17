@@ -448,7 +448,7 @@ Two rules matter when calling one:
 An extension is not reviewed or endorsed by Todoist, and runs with the user's own permissions.
 
 ### Settings, Stats, And Utilities
-\`td status\` shows, sets or clears your shared status (apps that read it, such as Comms, show it too). The message is 1 to 80 characters. \`--until\` takes YYYY-MM-DD, YYYY-MM-DDTHH:MM (local time) or a full ISO 8601 timestamp; \`--for\` takes 30m, 2h, 1d or 1h30m, and the two conflict. \`--pause-notifications\` is stored on the status but only takes effect in apps that read it (Comms, and Todoist for push and email; in the Todoist Android app only the morning and evening pushes). \`--pause-activity\` is separate: it stops your Karma changing and protects your streaks while the status is active, and does not silence notifications. \`status set\` replaces the fields this CLI supports: omitted emoji, expiration and pause flags clear those values, while other fields and effects are preserved. The command \`status set --dry-run --json\` prints a preview without setting anything.
+\`td status\` shows, sets or clears your shared status (apps that read it, such as Comms, show it too). A status needs a message, an emoji or both: leave the message out for an emoji-only status. The message is 1 to 80 characters. \`--until\` takes YYYY-MM-DD, YYYY-MM-DDTHH:MM (local time) or a full ISO 8601 timestamp; \`--for\` takes 30m, 2h, 1d or 1h30m, and the two conflict. \`--pause-notifications\` is stored on the status but only takes effect in apps that read it (Comms, and Todoist for push and email; in the Todoist Android app only the morning and evening pushes). \`--pause-activity\` is separate: it stops your Karma changing and protects your streaks while the status is active, and does not silence notifications. \`status set\` replaces the fields this CLI supports: an omitted message, emoji, expiration or pause flag clears that value, while other fields and effects are preserved. The command \`status set --dry-run --json\` prints a preview without setting anything.
 \`\`\`bash
 td stats
 td stats goals --daily 10 --weekly 50
@@ -466,6 +466,7 @@ td status --json
 td status --ndjson
 td status set "Deep work" --emoji 🎯 --for 2h --pause-notifications
 td status set "On holiday" --emoji 🏝️ --until 2026-10-20T09:00 --pause-activity
+td status set --emoji 🤒 --for 1d
 td status set "Away" --for 1d --dry-run
 td status clear
 

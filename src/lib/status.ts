@@ -1,9 +1,12 @@
 import type { UserStatus } from '@todoist/sdk'
 import { formatDateTime } from './dates.js'
 
-/** One line for a status: emoji and message, then the expiry and the pause when they apply. */
+/**
+ * One line for a status: emoji and message, then the expiry and the pause when they apply.
+ * A status has a message, an emoji or both.
+ */
 export function formatStatus(status: UserStatus): string {
-    const parts = [status.emoji ? `${status.emoji} ${status.message}` : status.message]
+    const parts = [[status.emoji, status.message].filter(Boolean).join(' ')]
     if (status.activeUntil) {
         parts.push(`until ${formatDateTime(status.activeUntil)}`)
     }

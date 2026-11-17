@@ -33,7 +33,7 @@ Examples:
     status
         .command('set [message]')
         .description('Set your status, replacing its message, emoji, expiration, and pause effects')
-        .option('--emoji <emoji>', 'Emoji to show next to the message')
+        .option('--emoji <emoji>', 'Emoji to show next to the message, or on its own without one')
         .option(
             '--until <datetime>',
             'When the status ends: YYYY-MM-DD, YYYY-MM-DDTHH:MM or a full ISO 8601 timestamp. Local time unless it has Z or an offset',
@@ -52,15 +52,16 @@ Examples:
         .addHelpText(
             'after',
             `
-The message is 1 to 80 characters. The status is shared with your Todoist account, so other
+A status needs a message, an emoji or both. The message is 1 to 80 characters. The status is shared with your Todoist account, so other
 apps that read it show it too. --pause-notifications is stored on the status but only affects apps that read
 it: Comms, and Todoist for push and email (in the Todoist Android app, only the morning and evening pushes). --pause-activity is separate: it stops
 your Karma changing and protects your streaks, and does not silence notifications.
-Omitted emoji, expiration, and pause flags clear those values. Other fields and effects are preserved.
+An omitted message, emoji, expiration, or pause flag clears that value. Other fields and effects are preserved.
 
 Examples:
   td status set "On holiday" --emoji 🏝️ --until 2026-10-20T09:00
-  td status set "Deep work" --emoji 🎯 --for 2h --pause-notifications`,
+  td status set "Deep work" --emoji 🎯 --for 2h --pause-notifications
+  td status set --emoji 🤒 --for 1d`,
         )
         .action(setStatus)
 
