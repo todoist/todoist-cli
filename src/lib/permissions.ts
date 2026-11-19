@@ -53,7 +53,6 @@ const KNOWN_SAFE_API_METHODS = new Set([
     // Project insights
     'getProjectActivityStats',
     'getProjectHealth',
-    'getProjectHealthContext',
     'getProjectProgress',
     'getWorkspaceInsights',
     // Templates (export is read-only)

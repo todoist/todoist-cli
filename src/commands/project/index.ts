@@ -13,7 +13,6 @@ import { browseProject } from './browse.js'
 import { listCollaborators } from './collaborators.js'
 import { createProject } from './create.js'
 import { deleteProject } from './delete.js'
-import { showProjectHealthContext } from './health-context.js'
 import { showProjectHealth } from './health.js'
 import { VIEW_STYLE_CHOICES } from './helpers.js'
 import { joinProjectCmd } from './join.js'
@@ -358,18 +357,6 @@ Examples:
                 return
             }
             return showProjectHealth(ref, options)
-        })
-
-    const healthContextCmd = project
-        .command('health-context [ref]')
-        .description('Show detailed project metrics and task breakdown for health analysis')
-        .option('--json', 'Output as JSON')
-        .action((ref, options) => {
-            if (!ref) {
-                failWithUsage(healthContextCmd)
-                return
-            }
-            return showProjectHealthContext(ref, options)
         })
 
     const activityStatsCmd = project

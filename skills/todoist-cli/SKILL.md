@@ -97,7 +97,7 @@ Resolution order: `--user <ref>` > `TD_USER` > `user.defaultUser` from config > 
 - Daily views: `td today`, `td inbox`, `td upcoming`, `td completed`, `td activity`
 - Task lifecycle: `td task list/view/add/add-many/quickadd/update/reschedule/move/complete/uncomplete/delete/browse` (alias: `td task qa` for `quickadd`)
 - Projects: `td project list/view/create/update/archive/unarchive/archived/delete/move/reorder/join/share/browse/collaborators/permissions`
-- Project analytics: `td project progress/health/health-context/activity-stats/analyze-health`
+- Project analytics: `td project progress/health/activity-stats/analyze-health`
 - Organization: `td label ...`, `td filter ...`, `td section ...`, `td folder ...`, `td workspace ...`
 - Collaboration: `td comment ...`, `td notification ...`, `td reminder ...`
 - Templates and files: `td template ...`, `td attachment view <file-url>`, `td backup ...`
@@ -218,7 +218,6 @@ td project share "Team Plan" bob@example.com --role guest --auto-invite
 td project delete "Roadmap" --yes
 td project progress "Roadmap"
 td project health "Roadmap"
-td project health-context "Roadmap"
 td project activity-stats "Roadmap" --weeks 4 --include-weekly
 td project analyze-health "Roadmap"
 td project archived-count --workspace "Acme"

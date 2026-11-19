@@ -72,7 +72,6 @@ const API_SPINNER_MESSAGES: Record<string, { text: string; color?: 'blue' | 'gre
         getWorkspaceArchivedProjects: { text: 'Loading archived projects...', color: 'blue' },
         getProjectActivityStats: { text: 'Loading activity stats...', color: 'blue' },
         getProjectHealth: { text: 'Loading project health...', color: 'blue' },
-        getProjectHealthContext: { text: 'Loading health context...', color: 'blue' },
         getProjectProgress: { text: 'Loading project progress...', color: 'blue' },
         getWorkspaceInsights: { text: 'Loading workspace insights...', color: 'blue' },
         getWorkspaceUserTasks: { text: 'Loading workspace user tasks...', color: 'blue' },

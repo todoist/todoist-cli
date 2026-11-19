@@ -121,20 +121,6 @@ export function createMockApi(overrides: Partial<TodoistApi> = {}): MockApi {
             isStale: false,
             updateInProgress: false,
         }),
-        getProjectHealthContext: vi.fn().mockResolvedValue({
-            projectId: '',
-            projectName: '',
-            projectDescription: null,
-            projectMetrics: {
-                totalTasks: 0,
-                completedTasks: 0,
-                overdueTasks: 0,
-                tasksCreatedThisWeek: 0,
-                tasksCompletedThisWeek: 0,
-                averageCompletionTime: null,
-            },
-            tasks: [],
-        }),
         getProjectProgress: vi.fn().mockResolvedValue({
             projectId: '',
             completedCount: 0,
