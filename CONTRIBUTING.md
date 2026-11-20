@@ -93,13 +93,21 @@ Use a `next` branch to ship a set of related PRs together, for example several b
 
 3. **Squash-merge each PR into `next`.** The PR title becomes the commit message, and later its changelog entry. Each merge triggers CI and publishes a pre-release (e.g., `2.1.0-next.1`) to the `next` dist-tag on npm.
 
-    When PRs depend on each other, merge them bottom-up. Squashing gives the merged PR's commits new hashes, so rebase the next PR onto `next` before merging it, dropping the commits that were just squashed:
+    When PRs depend on each other, merge them bottom-up. Before merging the first one, note the head commit of every PR in the chain, since rebasing changes them:
+
+    ```sh
+    gh pr view <PR number> --json headRefOid --jq .headRefOid
+    ```
+
+    Squashing gives the merged PR's commits new hashes, so rebase the next PR onto `next` before merging it, dropping the commits up to the noted head of the PR below it:
 
     ```sh
     git fetch origin
-    git rebase --onto origin/next <head commit of the PR just merged> <next PR's branch>
+    git rebase --onto origin/next <noted head commit of the PR below> <next PR's branch>
     git push --force-with-lease origin <next PR's branch>
     ```
+
+    Use the noted commit, not the current head of the PR below. Once that PR has been rebased, its head is a new commit that the next PR doesn't contain, and the rebase would replay commits that are already on `next`.
 
     PRs in a GitHub stack can't be merged with `gh pr merge`. Remove the stack first with `gh stack unstack <stack number>`.
 
