@@ -1,5 +1,6 @@
 import { getApi } from '../../lib/api/core.js'
-import { resolveProjectId, resolveTaskRef } from '../../lib/refs.js'
+import type { Project } from '../../lib/api/core.js'
+import { resolveProjectRef, resolveTaskRef } from '../../lib/refs.js'
 import { listTasksForProject, type TaskListOptions } from '../../lib/task-list.js'
 
 export type ListOptions = TaskListOptions & { project?: string }
@@ -7,10 +8,11 @@ export type ListOptions = TaskListOptions & { project?: string }
 export async function listTasks(options: ListOptions): Promise<void> {
     const api = await getApi()
 
-    let projectId: string | null = null
+    let project: Project | undefined
     if (options.project) {
-        projectId = await resolveProjectId(api, options.project, { includeUnjoined: true })
+        project = await resolveProjectRef(api, options.project, { includeUnjoined: true })
     }
+    let projectId = project?.id ?? null
 
     let parentId: string | undefined
     if (options.parent) {
@@ -19,5 +21,5 @@ export async function listTasks(options: ListOptions): Promise<void> {
         if (!projectId) projectId = parentTask.projectId
     }
 
-    await listTasksForProject(projectId, { ...options, parent: parentId })
+    await listTasksForProject(projectId, { ...options, parent: parentId }, project)
 }

@@ -182,6 +182,37 @@ describe('activity command', () => {
         )
     })
 
+    it('names the project and initiator of an unjoined workspace project', async () => {
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+        mockApi.getActivityLogs.mockResolvedValue({
+            results: [
+                {
+                    id: 'event-1',
+                    objectType: 'task',
+                    objectId: 'task-1',
+                    eventType: 'completed',
+                    eventDate: new Date('2025-01-10T14:30:00Z'),
+                    parentProjectId: 'unjoined1',
+                    parentItemId: null,
+                    initiatorId: 'user-1',
+                    extraData: { content: 'Ship it' },
+                },
+            ],
+            nextCursor: null,
+        })
+        mockApi.getWorkspaceUsers.mockResolvedValue({
+            workspaceUsers: [
+                { userId: 'user-1', fullName: 'Alice Smith', userEmail: 'alice@example.com' },
+            ],
+            hasMore: false,
+        })
+
+        await createProgram().parseAsync(['node', 'td', 'activity', '--project', 'id:unjoined1'])
+
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Other Team Backlog'))
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('by Alice S.'))
+    })
+
     it('filters by initiator with "me"', async () => {
         const program = createProgram()
 

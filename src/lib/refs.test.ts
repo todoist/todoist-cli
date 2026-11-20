@@ -6,8 +6,7 @@ vi.mock('./api/workspaces.js', () => ({
 }))
 
 import { fixtures } from '../test-support/fixtures.js'
-import { createMockApi, mockUnjoinedProject } from '../test-support/mock-api.js'
-import type { Project } from './api/core.js'
+import { createMockApi, fullProjectData, mockUnjoinedProject } from '../test-support/mock-api.js'
 import { fetchWorkspaceFolders, fetchWorkspaces, type Workspace } from './api/workspaces.js'
 import { CliError } from './errors.js'
 import {
@@ -590,10 +589,6 @@ describe('resolveProjectRef with includeUnjoined', () => {
     const unjoined = fixtures.projects.unjoined
     const notFound = new TodoistRequestError('HTTP 404: Not Found', 404)
 
-    function fullData(project: Project | null) {
-        return { project, commentsCount: 0, tasks: [], sections: [], collaborators: [], notes: [] }
-    }
-
     it.each([
         ['an id: ref', 'id:unjoined1'],
         ['a URL', 'https://app.todoist.com/app/project/other-team-backlog-unjoined1'],
@@ -601,7 +596,7 @@ describe('resolveProjectRef with includeUnjoined', () => {
     ])('reads a workspace project the user has not joined from %s', async (_, ref) => {
         const api = createMockApi({
             getProject: vi.fn().mockRejectedValue(notFound),
-            getFullProject: vi.fn().mockResolvedValue(fullData(unjoined)),
+            getFullProject: vi.fn().mockResolvedValue(fullProjectData(unjoined)),
         })
 
         await expect(resolveProjectRef(api, ref, { includeUnjoined: true })).resolves.toBe(unjoined)
@@ -622,7 +617,7 @@ describe('resolveProjectRef with includeUnjoined', () => {
 
     it.each([
         ['answers 404', () => vi.fn().mockRejectedValue(new CliError('NOT_FOUND', 'HTTP 404'))],
-        ['returns no project', () => vi.fn().mockResolvedValue(fullData(null))],
+        ['returns no project', () => vi.fn().mockResolvedValue(fullProjectData(null))],
     ])("keeps getProject's 404 when the full project %s too", async (_, getFullProject) => {
         const api = createMockApi({
             getProject: vi.fn().mockRejectedValue(notFound),
@@ -658,10 +653,22 @@ describe('resolveProjectRef with includeUnjoined', () => {
         expect(api.getFullProject).not.toHaveBeenCalled()
     })
 
+    it('surfaces an error from the full project other than a 404', async () => {
+        const error = new TodoistRequestError('HTTP 500', 500)
+        const api = createMockApi({
+            getProject: vi.fn().mockRejectedValue(notFound),
+            getFullProject: vi.fn().mockRejectedValue(error),
+        })
+
+        await expect(
+            resolveProjectRef(api, 'id:unjoined1', { includeUnjoined: true }),
+        ).rejects.toBe(error)
+    })
+
     it('only reads joined projects without the option', async () => {
         const api = createMockApi({
             getProject: vi.fn().mockRejectedValue(notFound),
-            getFullProject: vi.fn().mockResolvedValue(fullData(unjoined)),
+            getFullProject: vi.fn().mockResolvedValue(fullProjectData(unjoined)),
         })
 
         await expect(resolveProjectRef(api, 'id:unjoined1')).rejects.toBe(notFound)

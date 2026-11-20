@@ -1,5 +1,6 @@
 import {
     type AppWithUserCount,
+    isWorkspaceProject,
     parseTodoistUrl as parseSdkTodoistUrl,
     TodoistApi,
     TodoistRequestError,
@@ -360,6 +361,11 @@ export async function getProjectIncludingUnjoined(api: TodoistApi, id: string): 
         if (!project) throw error
         return project
     }
+}
+
+/** Whether this is a workspace project the user hasn't joined (its `role` is `null`). */
+export function isUnjoinedProject(project: Project): boolean {
+    return isWorkspaceProject(project) && project.role === null
 }
 
 async function getFullProjectRecord(api: TodoistApi, id: string): Promise<Project | null> {

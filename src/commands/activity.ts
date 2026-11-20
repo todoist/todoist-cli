@@ -13,7 +13,7 @@ import { CURSOR_DESCRIPTION } from '../lib/constants.js'
 import type { Pagination } from '../lib/options.js'
 import { formatPaginatedJson, formatPaginatedNdjson } from '../lib/output.js'
 import { paginate } from '../lib/pagination.js'
-import { extractId, isIdRef, resolveProjectId } from '../lib/refs.js'
+import { extractId, isIdRef, resolveProjectRef } from '../lib/refs.js'
 import { truncateForDisplay } from '../lib/text.js'
 
 interface ActivityOptions extends Pagination {
@@ -155,10 +155,10 @@ export function registerActivityCommand(program: Command): void {
 
             const api = await getApi()
 
-            let projectId: string | undefined
-            if (options.project) {
-                projectId = await resolveProjectId(api, options.project, { includeUnjoined: true })
-            }
+            const project = options.project
+                ? await resolveProjectRef(api, options.project, { includeUnjoined: true })
+                : undefined
+            const projectId = project?.id
 
             let initiatorId: string | undefined
             if (options.by) {
@@ -221,6 +221,8 @@ export function registerActivityCommand(program: Command): void {
 
             const { results: allProjects } = await api.getProjects()
             const projects = new Map<string, Project>(allProjects.map((p) => [p.id, p]))
+            // A workspace project the user hasn't joined isn't in their project list.
+            if (project) projects.set(project.id, project)
 
             const workspaceIds = new Set<string>()
             for (const event of events) {

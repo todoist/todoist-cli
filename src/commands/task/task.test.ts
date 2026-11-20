@@ -1640,7 +1640,37 @@ describe('task commands on a workspace project the user has not joined', () => {
         const output = consoleSpy.mock.calls.map((call) => String(call[0])).join('\n')
         expect(output).toContain('Other Team Backlog')
         expect(output).toContain('Ship the other team thing')
+        expect(mockApi.getFullProject).toHaveBeenCalledTimes(1)
     })
+
+    it.each([
+        ['--priority', 'p1'],
+        ['--label', 'work'],
+        ['--filter', 'today'],
+    ])(
+        'task list --project refuses %s, which only searches joined projects',
+        async (flag, value) => {
+            await expect(
+                createProgram().parseAsync([
+                    'node',
+                    'td',
+                    'task',
+                    'list',
+                    '--project',
+                    'id:unjoined1',
+                    flag,
+                    value,
+                ]),
+            ).rejects.toMatchObject({
+                code: 'CONFLICTING_OPTIONS',
+                hints: [
+                    'List all its tasks without them: td task list --project id:unjoined1',
+                    'Or join the project first: td project join id:unjoined1',
+                ],
+            })
+            expect(mockApi.getTasksByFilter).not.toHaveBeenCalled()
+        },
+    )
 
     it('task list --project --json lists its tasks', async () => {
         const consoleSpy = captureConsole()

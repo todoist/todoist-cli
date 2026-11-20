@@ -226,6 +226,33 @@ describe('completed command', () => {
         )
     })
 
+    it('names the project and assignee of an unjoined workspace project', async () => {
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+        mockApi.getCompletedTasksByCompletionDate.mockResolvedValue({
+            items: [
+                {
+                    id: 'task-1',
+                    content: 'Shipped',
+                    projectId: 'unjoined1',
+                    priority: 1,
+                    responsibleUid: 'user-456',
+                },
+            ],
+            nextCursor: null,
+        })
+        mockApi.getWorkspaceUsers.mockResolvedValue({
+            workspaceUsers: [
+                { userId: 'user-456', fullName: 'Bob Jones', userEmail: 'bob@example.com' },
+            ],
+            hasMore: false,
+        })
+
+        await createProgram().parseAsync(['node', 'td', 'completed', '--project', 'id:unjoined1'])
+
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Other Team Backlog'))
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('+Bob J.'))
+    })
+
     it('outputs JSON with --json flag', async () => {
         const program = createProgram()
 

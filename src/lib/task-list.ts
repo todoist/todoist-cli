@@ -13,7 +13,7 @@ import {
     formatTaskRow,
 } from './output.js'
 import { LIMITS, paginate } from './pagination.js'
-import { getProjectIncludingUnjoined, resolveWorkspaceRef } from './refs.js'
+import { getProjectIncludingUnjoined, isUnjoinedProject, resolveWorkspaceRef } from './refs.js'
 
 /**
  * Every project the account can see, keyed by id.
@@ -291,9 +291,15 @@ async function formatFlatTaskList({
     return blocks.join('\n\n')
 }
 
+/**
+ * @param project - The project behind `projectId`, when the caller has already
+ *   resolved it. It saves fetching the project again, and lets a workspace
+ *   project the user hasn't joined be told apart before filtering.
+ */
 export async function listTasksForProject(
     projectId: string | null,
     options: TaskListOptions,
+    project?: Project,
 ): Promise<void> {
     const outputMode = resolveOutputMode(options)
     const api = await getApi()
@@ -313,6 +319,17 @@ export async function listTasksForProject(
             ? `(${options.filter}) & (${builtFilter})`
             : options.filter
         : builtFilter
+
+    if (filterQuery && project && isUnjoinedProject(project)) {
+        throw new CliError(
+            'CONFLICTING_OPTIONS',
+            `Filter flags can't be combined with --project for a workspace project you haven't joined: Todoist's filter search only covers joined projects.`,
+            [
+                `List all its tasks without them: td task list --project id:${project.id}`,
+                `Or join the project first: td project join id:${project.id}`,
+            ],
+        )
+    }
 
     if (filterQuery) {
         const result = await paginate(
@@ -388,7 +405,7 @@ export async function listTasksForProject(
     if (projectId) {
         // When listing tasks for a specific project, we only need that project's info
         const [projectRes, sectionsRes] = await Promise.all([
-            getProjectIncludingUnjoined(api, projectId),
+            project ?? getProjectIncludingUnjoined(api, projectId),
             api.getSections({ projectId }),
         ])
 

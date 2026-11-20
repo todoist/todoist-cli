@@ -12,7 +12,7 @@ import {
     formatTaskRow,
 } from '../../lib/output.js'
 import { LIMITS, paginate } from '../../lib/pagination.js'
-import { resolveProjectId } from '../../lib/refs.js'
+import { resolveProjectRef } from '../../lib/refs.js'
 
 interface CompletedListOptions extends PaginatedViewOptions {
     since?: string
@@ -114,10 +114,11 @@ export async function listCompleted(options: CompletedListOptions): Promise<void
 
     const api = await getApi()
 
-    let projectId: string | undefined
-    if (!isSearch && options.project) {
-        projectId = await resolveProjectId(api, options.project, { includeUnjoined: true })
-    }
+    const project =
+        !isSearch && options.project
+            ? await resolveProjectRef(api, options.project, { includeUnjoined: true })
+            : undefined
+    const projectId = project?.id
 
     const { results: tasks, nextCursor } = await paginate(
         async (cursor, limit) => {
@@ -176,6 +177,8 @@ export async function listCompleted(options: CompletedListOptions): Promise<void
 
     const { results: allProjects } = await api.getProjects()
     const projects = new Map<string, Project>(allProjects.map((p) => [p.id, p]))
+    // A workspace project the user hasn't joined isn't in their project list.
+    if (project) projects.set(project.id, project)
 
     const collaboratorCache = new CollaboratorCache()
     await collaboratorCache.preload(api, tasks, projects)
