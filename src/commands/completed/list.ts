@@ -116,7 +116,7 @@ export async function listCompleted(options: CompletedListOptions): Promise<void
 
     let projectId: string | undefined
     if (!isSearch && options.project) {
-        projectId = await resolveProjectId(api, options.project)
+        projectId = await resolveProjectId(api, options.project, { includeUnjoined: true })
     }
 
     const { results: tasks, nextCursor } = await paginate(

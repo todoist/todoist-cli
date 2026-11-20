@@ -213,7 +213,7 @@ New subcommand? Copy a sibling in the target group, wire it in that group's
   `resolveTaskRef`, `resolveProjectRef`, `resolveProjectId`,
   `resolveSectionId`, `resolveParentTaskId`, `resolveWorkspaceRef`,
   `resolveFolderRef`, `resolveAppRef`, `resolveFromList`,
-  `parseTodoistUrl`, `classifyTodoistUrl`
+  `getProjectIncludingUnjoined`, `parseTodoistUrl`, `classifyTodoistUrl`
 - **`reorder.ts`** — `validateReorderPlacement()` for shared
   `--before` / `--after` / `--position` validation.
 - **`urls.ts`** — `taskUrl`, `projectUrl`, `labelUrl`, `sectionUrl`,
@@ -300,6 +300,11 @@ All live in `src/lib/refs.ts`:
    substring. The ID goes first so a bare ID never resolves to another entity
    whose name contains it. Use for entities with user-facing names.
    Add new wrappers in `refs.ts`; the internal `resolveRef` is private.
+   Commands that only read pass `{ includeUnjoined: true }` to
+   `resolveProjectRef` / `resolveProjectId`, so an ID or URL also reaches a
+   workspace project the user hasn't joined (`getProject` 404s for those;
+   `getProjectIncludingUnjoined` falls back to the full-data endpoint).
+   Commands that write leave it off: they still need membership.
 2. **ID-only validation** (`lenientIdRef`) — sync, no API call, returns an ID
    string. Tries `id:` prefix → URL → raw ID → error. Use for entities without
    a `fetchAll` endpoint (comments, reminders).

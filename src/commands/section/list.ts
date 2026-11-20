@@ -23,7 +23,7 @@ export async function listSections(
 
     let projectId: string | undefined
     if (projectRef) {
-        projectId = await resolveProjectId(api, projectRef)
+        projectId = await resolveProjectId(api, projectRef, { includeUnjoined: true })
     }
 
     const targetLimit = options.all

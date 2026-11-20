@@ -22,7 +22,7 @@ import { openInBrowser } from '../../lib/browser.js'
 import { enableMutationJson } from '../../lib/mutation-json.js'
 import { setupApiMock } from '../../test-support/api-mock.js'
 import { fixtures } from '../../test-support/fixtures.js'
-import { type MockApi } from '../../test-support/mock-api.js'
+import { type MockApi, mockUnjoinedProject } from '../../test-support/mock-api.js'
 import { registerTaskCommand } from './index.js'
 
 const mockCompleteTaskForever = vi.mocked(completeTaskForever)
@@ -1603,6 +1603,77 @@ describe('task list --parent', () => {
                 parentId: 'parent-1',
             }),
         )
+    })
+})
+
+describe('task commands on a workspace project the user has not joined', () => {
+    let mockApi: MockApi
+    const task = {
+        ...fixtures.tasks.basic,
+        id: 'task-other-1',
+        content: 'Ship the other team thing',
+        projectId: 'unjoined1',
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockApi = setupApiMock()
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+        mockApi.getTasks.mockResolvedValue({ results: [task], nextCursor: null })
+    })
+
+    it('task list --project lists its tasks under its name', async () => {
+        const consoleSpy = captureConsole()
+
+        await createProgram().parseAsync([
+            'node',
+            'td',
+            'task',
+            'list',
+            '--project',
+            'id:unjoined1',
+        ])
+
+        expect(mockApi.getTasks).toHaveBeenCalledWith(
+            expect.objectContaining({ projectId: 'unjoined1' }),
+        )
+        const output = consoleSpy.mock.calls.map((call) => String(call[0])).join('\n')
+        expect(output).toContain('Other Team Backlog')
+        expect(output).toContain('Ship the other team thing')
+    })
+
+    it('task list --project --json lists its tasks', async () => {
+        const consoleSpy = captureConsole()
+
+        await createProgram().parseAsync([
+            'node',
+            'td',
+            'task',
+            'list',
+            '--project',
+            'https://app.todoist.com/app/project/other-team-backlog-unjoined1',
+            '--json',
+        ])
+
+        const output = JSON.parse(String(consoleSpy.mock.calls[0][0]))
+        expect(output.results.map((t: Task) => t.id)).toEqual(['task-other-1'])
+    })
+
+    it('task add --project still needs the user to join first', async () => {
+        await expect(
+            createProgram().parseAsync([
+                'node',
+                'td',
+                'task',
+                'add',
+                '--content',
+                'New task',
+                '--project',
+                'id:unjoined1',
+            ]),
+        ).rejects.toThrow('HTTP 404: Not Found')
+        expect(mockApi.getFullProject).not.toHaveBeenCalled()
+        expect(mockApi.addTask).not.toHaveBeenCalled()
     })
 })
 

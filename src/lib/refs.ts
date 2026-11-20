@@ -93,11 +93,15 @@ export function looksLikeRawId(ref: string): boolean {
  * `NOT_FOUND` `CliError`, so both shapes are accepted.
  */
 function isMissingIdError(error: unknown): boolean {
-    if (error instanceof CliError) return error.code === 'NOT_FOUND'
     return (
-        error instanceof TodoistRequestError &&
-        (error.httpStatusCode === 404 || error.httpStatusCode === 400)
+        isNotFoundError(error) ||
+        (error instanceof TodoistRequestError && error.httpStatusCode === 400)
     )
+}
+
+function isNotFoundError(error: unknown): boolean {
+    if (error instanceof CliError) return error.code === 'NOT_FOUND'
+    return error instanceof TodoistRequestError && error.httpStatusCode === 404
 }
 
 function isMatchingUrlType(
@@ -314,14 +318,57 @@ export async function resolveTaskRef(api: TodoistApi, ref: string): Promise<Task
     )
 }
 
-export async function resolveProjectRef(api: TodoistApi, ref: string): Promise<Project> {
+export type ResolveProjectOptions = {
+    /**
+     * Also resolve, by ID or URL, a workspace project the user can open but
+     * hasn't joined. Only for commands that read: writing to a project still
+     * needs membership. Names still match joined projects only.
+     */
+    includeUnjoined?: boolean
+}
+
+export async function resolveProjectRef(
+    api: TodoistApi,
+    ref: string,
+    options: ResolveProjectOptions = {},
+): Promise<Project> {
     return resolveRef(
         ref,
-        (id) => api.getProject(id),
+        (id) =>
+            options.includeUnjoined ? getProjectIncludingUnjoined(api, id) : api.getProject(id),
         () => api.getProjects(),
         (p) => p.name,
         'project',
     )
+}
+
+/**
+ * Fetches a project by ID, including a workspace project the user can open in
+ * the app but hasn't joined. `getProject` answers 404 for those, while the
+ * full-data endpoint returns them, so a 404 falls back to it. A project that
+ * endpoint can't return either keeps `getProject`'s 404.
+ *
+ * Only for commands that read. The fallback also downloads the project's tasks,
+ * sections and comments, so it only runs after a 404.
+ */
+export async function getProjectIncludingUnjoined(api: TodoistApi, id: string): Promise<Project> {
+    try {
+        return await api.getProject(id)
+    } catch (error) {
+        if (!isNotFoundError(error)) throw error
+        const project = await getFullProjectRecord(api, id)
+        if (!project) throw error
+        return project
+    }
+}
+
+async function getFullProjectRecord(api: TodoistApi, id: string): Promise<Project | null> {
+    try {
+        return (await api.getFullProject(id)).project
+    } catch (error) {
+        if (isNotFoundError(error)) return null
+        throw error
+    }
 }
 
 /**
@@ -375,8 +422,12 @@ export async function resolveAppRef(api: TodoistApi, ref: string): Promise<AppWi
     return api.getApp(matched.id)
 }
 
-export async function resolveProjectId(api: TodoistApi, ref: string): Promise<string> {
-    const project = await resolveProjectRef(api, ref)
+export async function resolveProjectId(
+    api: TodoistApi,
+    ref: string,
+    options: ResolveProjectOptions = {},
+): Promise<string> {
+    const project = await resolveProjectRef(api, ref, options)
     return project.id
 }
 

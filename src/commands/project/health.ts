@@ -5,7 +5,7 @@ import { resolveProjectRef } from '../../lib/refs.js'
 
 export async function showProjectHealth(ref: string, options: { json?: boolean }): Promise<void> {
     const api = await getApi()
-    const project = await resolveProjectRef(api, ref)
+    const project = await resolveProjectRef(api, ref, { includeUnjoined: true })
     const health = await api.getProjectHealth(project.id)
 
     if (options.json) {

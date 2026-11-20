@@ -157,7 +157,7 @@ export function registerActivityCommand(program: Command): void {
 
             let projectId: string | undefined
             if (options.project) {
-                projectId = await resolveProjectId(api, options.project)
+                projectId = await resolveProjectId(api, options.project, { includeUnjoined: true })
             }
 
             let initiatorId: string | undefined

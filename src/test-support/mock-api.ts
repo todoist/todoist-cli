@@ -1,6 +1,7 @@
-import type { TodoistApi } from '@todoist/sdk'
+import { type TodoistApi, TodoistRequestError } from '@todoist/sdk'
 import type { Mock } from 'vitest'
 import { vi } from 'vitest'
+import type { Project } from '../lib/api/core.js'
 
 // biome-ignore lint/suspicious/noExplicitAny: standard conditional type pattern (same as built-in Parameters<T>/ReturnType<T>)
 type FunctionKeys<T> = { [K in keyof T]: T[K] extends (...args: any[]) => any ? K : never }[keyof T]
@@ -203,4 +204,20 @@ export function createMockApi(overrides: Partial<TodoistApi> = {}): MockApi {
         deleteFilter: vi.fn().mockResolvedValue(true),
         ...overrides,
     } as unknown as MockApi
+}
+
+/**
+ * Answers as the API does for a workspace project the user can open but hasn't
+ * joined: `getProject` 404s, while the full-data endpoint returns the project.
+ */
+export function mockUnjoinedProject(mockApi: MockApi, project: Project): void {
+    mockApi.getProject.mockRejectedValue(new TodoistRequestError('HTTP 404: Not Found', 404))
+    mockApi.getFullProject.mockResolvedValue({
+        project,
+        commentsCount: 0,
+        tasks: [],
+        sections: [],
+        collaborators: [],
+        notes: [],
+    })
 }

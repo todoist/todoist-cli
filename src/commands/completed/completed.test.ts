@@ -6,7 +6,8 @@ vi.mock('../../lib/api/core.js', () => ({
 }))
 
 import { setupApiMock } from '../../test-support/api-mock.js'
-import { type MockApi } from '../../test-support/mock-api.js'
+import { fixtures } from '../../test-support/fixtures.js'
+import { type MockApi, mockUnjoinedProject } from '../../test-support/mock-api.js'
 import { registerCompletedCommand } from './index.js'
 
 function createProgram() {
@@ -208,6 +209,20 @@ describe('completed command', () => {
             expect.objectContaining({
                 projectId: 'proj-1',
             }),
+        )
+    })
+
+    it('filters by a workspace project the user has not joined', async () => {
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+        mockApi.getCompletedTasksByCompletionDate.mockResolvedValue({
+            items: [],
+            nextCursor: null,
+        })
+
+        await createProgram().parseAsync(['node', 'td', 'completed', '--project', 'id:unjoined1'])
+
+        expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
+            expect.objectContaining({ projectId: 'unjoined1' }),
         )
     })
 

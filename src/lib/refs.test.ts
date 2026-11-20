@@ -1,3 +1,4 @@
+import { TodoistRequestError } from '@todoist/sdk'
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('./api/workspaces.js', () => ({
     fetchWorkspaces: vi.fn(),
@@ -5,8 +6,10 @@ vi.mock('./api/workspaces.js', () => ({
 }))
 
 import { fixtures } from '../test-support/fixtures.js'
-import { createMockApi } from '../test-support/mock-api.js'
+import { createMockApi, mockUnjoinedProject } from '../test-support/mock-api.js'
+import type { Project } from './api/core.js'
 import { fetchWorkspaceFolders, fetchWorkspaces, type Workspace } from './api/workspaces.js'
+import { CliError } from './errors.js'
 import {
     classifyTodoistUrl,
     extractId,
@@ -583,7 +586,99 @@ describe('resolveProjectRef', () => {
     })
 })
 
+describe('resolveProjectRef with includeUnjoined', () => {
+    const unjoined = fixtures.projects.unjoined
+    const notFound = new TodoistRequestError('HTTP 404: Not Found', 404)
+
+    function fullData(project: Project | null) {
+        return { project, commentsCount: 0, tasks: [], sections: [], collaborators: [], notes: [] }
+    }
+
+    it.each([
+        ['an id: ref', 'id:unjoined1'],
+        ['a URL', 'https://app.todoist.com/app/project/other-team-backlog-unjoined1'],
+        ['a bare ID', 'unjoined1'],
+    ])('reads a workspace project the user has not joined from %s', async (_, ref) => {
+        const api = createMockApi({
+            getProject: vi.fn().mockRejectedValue(notFound),
+            getFullProject: vi.fn().mockResolvedValue(fullData(unjoined)),
+        })
+
+        await expect(resolveProjectRef(api, ref, { includeUnjoined: true })).resolves.toBe(unjoined)
+        expect(api.getFullProject).toHaveBeenCalledWith('unjoined1')
+        expect(api.getProjects).not.toHaveBeenCalled()
+    })
+
+    it('does not look past getProject for a joined project', async () => {
+        const api = createMockApi({
+            getProject: vi.fn().mockResolvedValue(fixtures.projects.work),
+        })
+
+        await expect(
+            resolveProjectRef(api, 'id:proj-work', { includeUnjoined: true }),
+        ).resolves.toBe(fixtures.projects.work)
+        expect(api.getFullProject).not.toHaveBeenCalled()
+    })
+
+    it.each([
+        ['answers 404', () => vi.fn().mockRejectedValue(new CliError('NOT_FOUND', 'HTTP 404'))],
+        ['returns no project', () => vi.fn().mockResolvedValue(fullData(null))],
+    ])("keeps getProject's 404 when the full project %s too", async (_, getFullProject) => {
+        const api = createMockApi({
+            getProject: vi.fn().mockRejectedValue(notFound),
+            getFullProject: getFullProject(),
+        })
+
+        await expect(
+            resolveProjectRef(api, 'id:unjoined1', { includeUnjoined: true }),
+        ).rejects.toBe(notFound)
+    })
+
+    it('falls through to name matching when a bare ID cannot be read either', async () => {
+        const api = createMockApi({
+            getProject: vi.fn().mockRejectedValue(notFound),
+            getFullProject: vi.fn().mockRejectedValue(new CliError('NOT_FOUND', 'HTTP 404')),
+            getProjects: vi.fn().mockResolvedValue({ results: [], nextCursor: null }),
+        })
+
+        await expect(
+            resolveProjectRef(api, 'unjoined1', { includeUnjoined: true }),
+        ).rejects.toMatchObject({ code: 'PROJECT_NOT_FOUND' })
+    })
+
+    it.each([400, 500])('does not look further when getProject fails with %s', async (status) => {
+        const error = new TodoistRequestError(`HTTP ${status}`, status)
+        const api = createMockApi({
+            getProject: vi.fn().mockRejectedValue(error),
+        })
+
+        await expect(
+            resolveProjectRef(api, 'id:unjoined1', { includeUnjoined: true }),
+        ).rejects.toBe(error)
+        expect(api.getFullProject).not.toHaveBeenCalled()
+    })
+
+    it('only reads joined projects without the option', async () => {
+        const api = createMockApi({
+            getProject: vi.fn().mockRejectedValue(notFound),
+            getFullProject: vi.fn().mockResolvedValue(fullData(unjoined)),
+        })
+
+        await expect(resolveProjectRef(api, 'id:unjoined1')).rejects.toBe(notFound)
+        expect(api.getFullProject).not.toHaveBeenCalled()
+    })
+})
+
 describe('resolveProjectId', () => {
+    it('passes includeUnjoined through', async () => {
+        const api = createMockApi()
+        mockUnjoinedProject(api, fixtures.projects.unjoined)
+
+        await expect(
+            resolveProjectId(api, 'id:unjoined1', { includeUnjoined: true }),
+        ).resolves.toBe('unjoined1')
+    })
+
     it('returns just the ID from resolved project', async () => {
         const api = createMockApi({
             getProject: vi.fn().mockResolvedValue(fixtures.projects.work),

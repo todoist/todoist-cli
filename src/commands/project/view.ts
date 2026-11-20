@@ -97,7 +97,7 @@ export async function viewProject(
     options: ViewOptions & { detailed?: boolean; includeChildren?: boolean } = {},
 ): Promise<void> {
     const api = await getApi()
-    const project = await resolveProjectRef(api, ref)
+    const project = await resolveProjectRef(api, ref, { includeUnjoined: true })
 
     let allPersonal: PersonalProject[] | undefined
     // Started rather than awaited: paginating the project tree is independent of

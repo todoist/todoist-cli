@@ -22,7 +22,7 @@ export async function listComments(ref: string, options: ListOptions): Promise<v
 
     let queryArgs: { taskId: string } | { projectId: string }
     if (options.project) {
-        const project = await resolveProjectRef(api, ref)
+        const project = await resolveProjectRef(api, ref, { includeUnjoined: true })
         queryArgs = { projectId: project.id }
     } else {
         const task = await resolveTaskRef(api, ref)

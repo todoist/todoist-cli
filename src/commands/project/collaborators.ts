@@ -9,7 +9,7 @@ import { resolveProjectRef } from '../../lib/refs.js'
 export async function listCollaborators(ref: string, options: ViewOptions = {}): Promise<void> {
     const outputMode = resolveOutputMode(options)
     const api = await getApi()
-    const project = await resolveProjectRef(api, ref)
+    const project = await resolveProjectRef(api, ref, { includeUnjoined: true })
 
     if (isWorkspaceProject(project)) {
         const allUsers: Array<{

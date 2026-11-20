@@ -16,7 +16,8 @@ vi.mock('../../lib/api/core.js', () => ({
 
 import { getApi } from '../../lib/api/core.js'
 import { setupApiMock } from '../../test-support/api-mock.js'
-import { type MockApi } from '../../test-support/mock-api.js'
+import { fixtures } from '../../test-support/fixtures.js'
+import { type MockApi, mockUnjoinedProject } from '../../test-support/mock-api.js'
 import { registerCommentCommand } from './index.js'
 
 const mockGetApi = vi.mocked(getApi)
@@ -1197,6 +1198,25 @@ describe('project comment list', () => {
             expect.objectContaining({ projectId: 'proj-1' }),
         )
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Project note'))
+    })
+
+    it('lists comments on a workspace project the user has not joined', async () => {
+        captureConsole()
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+        mockApi.getComments.mockResolvedValue({ results: [], nextCursor: null })
+
+        await createProgram().parseAsync([
+            'node',
+            'td',
+            'comment',
+            'list',
+            'id:unjoined1',
+            '--project',
+        ])
+
+        expect(mockApi.getComments).toHaveBeenCalledWith(
+            expect.objectContaining({ projectId: 'unjoined1' }),
+        )
     })
 
     it('resolves project by name with --project flag', async () => {

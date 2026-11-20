@@ -5,6 +5,6 @@ import { projectUrl } from '../../lib/urls.js'
 
 export async function browseProject(ref: string): Promise<void> {
     const api = await getApi()
-    const project = await resolveProjectRef(api, ref)
+    const project = await resolveProjectRef(api, ref, { includeUnjoined: true })
     await openInBrowser(projectUrl(project.id))
 }

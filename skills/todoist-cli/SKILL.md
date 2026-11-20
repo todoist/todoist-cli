@@ -119,6 +119,8 @@ Some commands require `id:` or URL refs (name lookup unavailable): `task uncompl
 
 Reminder commands that take an ID (`reminder get/update/delete`, `reminder location get/update/delete`) only accept `id:xxx` or raw IDs — URLs are not supported for reminders.
 
+A workspace project you can open but haven't joined can be read by `id:xxx`, raw ID or URL (not by name) without joining it: `task list --project`, `project view/browse/collaborators/progress/health/activity-stats`, `section list`, `comment list --project`, `completed --project` and `activity --project`. Other commands on it need `td project join` first.
+
 ## Commands
 
 ### Daily Views

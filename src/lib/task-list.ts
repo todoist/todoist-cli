@@ -13,7 +13,7 @@ import {
     formatTaskRow,
 } from './output.js'
 import { LIMITS, paginate } from './pagination.js'
-import { resolveWorkspaceRef } from './refs.js'
+import { getProjectIncludingUnjoined, resolveWorkspaceRef } from './refs.js'
 
 /**
  * Every project the account can see, keyed by id.
@@ -388,7 +388,7 @@ export async function listTasksForProject(
     if (projectId) {
         // When listing tasks for a specific project, we only need that project's info
         const [projectRes, sectionsRes] = await Promise.all([
-            api.getProject(projectId),
+            getProjectIncludingUnjoined(api, projectId),
             api.getSections({ projectId }),
         ])
 

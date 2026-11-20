@@ -183,6 +183,18 @@ export const fixtures = {
             viewStyle: 'list',
             url: 'https://todoist.com/app/project/proj-ws-1',
         } as Project,
+        /** A workspace project the user can open but hasn't joined (see `mockUnjoinedProject`). */
+        unjoined: {
+            id: 'unjoined1',
+            name: 'Other Team Backlog',
+            color: 'red',
+            isFavorite: false,
+            workspaceId: 'ws-1',
+            folderId: null,
+            role: null,
+            viewStyle: 'list',
+            url: 'https://todoist.com/app/project/unjoined1',
+        } as Project,
     },
     sections: {
         planning: {

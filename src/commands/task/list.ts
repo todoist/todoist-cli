@@ -9,7 +9,7 @@ export async function listTasks(options: ListOptions): Promise<void> {
 
     let projectId: string | null = null
     if (options.project) {
-        projectId = await resolveProjectId(api, options.project)
+        projectId = await resolveProjectId(api, options.project, { includeUnjoined: true })
     }
 
     let parentId: string | undefined

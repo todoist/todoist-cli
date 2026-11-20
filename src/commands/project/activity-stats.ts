@@ -9,7 +9,7 @@ export async function showProjectActivityStats(
     options: { json?: boolean; weeks?: string; includeWeekly?: boolean },
 ): Promise<void> {
     const api = await getApi()
-    const project = await resolveProjectRef(api, ref)
+    const project = await resolveProjectRef(api, ref, { includeUnjoined: true })
 
     const args: GetProjectActivityStatsArgs = {}
     if (options.weeks) {

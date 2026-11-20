@@ -7,7 +7,7 @@ vi.mock('../../lib/api/core.js', () => ({
 
 import { setupApiMock } from '../../test-support/api-mock.js'
 import { fixtures } from '../../test-support/fixtures.js'
-import { type MockApi } from '../../test-support/mock-api.js'
+import { type MockApi, mockUnjoinedProject } from '../../test-support/mock-api.js'
 import { registerSectionCommand } from './index.js'
 
 function createProgram() {
@@ -106,6 +106,24 @@ describe('section list', () => {
 
         expect(mockApi.getSections).toHaveBeenCalledWith(
             expect.objectContaining({ projectId: 'proj-1' }),
+        )
+    })
+
+    it('lists the sections of a workspace project the user has not joined', async () => {
+        captureConsole()
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+
+        await createProgram().parseAsync([
+            'node',
+            'td',
+            'section',
+            'list',
+            '--project',
+            'id:unjoined1',
+        ])
+
+        expect(mockApi.getSections).toHaveBeenCalledWith(
+            expect.objectContaining({ projectId: 'unjoined1' }),
         )
     })
 

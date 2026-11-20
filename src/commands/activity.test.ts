@@ -8,7 +8,8 @@ vi.mock('../lib/api/core.js', () => ({
 
 import { getCurrentUserId } from '../lib/api/core.js'
 import { setupApiMock } from '../test-support/api-mock.js'
-import { type MockApi } from '../test-support/mock-api.js'
+import { fixtures } from '../test-support/fixtures.js'
+import { type MockApi, mockUnjoinedProject } from '../test-support/mock-api.js'
 import { registerActivityCommand } from './activity.js'
 
 const mockGetCurrentUserId = vi.mocked(getCurrentUserId)
@@ -168,6 +169,16 @@ describe('activity command', () => {
             expect.objectContaining({
                 parentProjectId: 'proj-1',
             }),
+        )
+    })
+
+    it('filters by a workspace project the user has not joined', async () => {
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+
+        await createProgram().parseAsync(['node', 'td', 'activity', '--project', 'id:unjoined1'])
+
+        expect(mockApi.getActivityLogs).toHaveBeenCalledWith(
+            expect.objectContaining({ parentProjectId: 'unjoined1' }),
         )
     })
 

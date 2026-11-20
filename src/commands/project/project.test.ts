@@ -26,7 +26,7 @@ import { openInBrowser } from '../../lib/browser.js'
 import { renderMarkdown } from '../../lib/markdown.js'
 import { setupApiMock } from '../../test-support/api-mock.js'
 import { fixtures } from '../../test-support/fixtures.js'
-import { createMockApi, type MockApi } from '../../test-support/mock-api.js'
+import { createMockApi, type MockApi, mockUnjoinedProject } from '../../test-support/mock-api.js'
 import { createProjectProgram as createProgram } from '../../test-support/project-program.js'
 
 const mockOpenInBrowser = vi.mocked(openInBrowser)
@@ -577,6 +577,67 @@ describe('project view', () => {
 
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Shared:'))
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Yes'))
+    })
+})
+
+describe('project commands on a workspace project the user has not joined', () => {
+    let mockApi: MockApi
+    let consoleSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockApi = setupApiMock()
+        consoleSpy = captureConsole()
+        mockUnjoinedProject(mockApi, fixtures.projects.unjoined)
+    })
+
+    it('project view shows it with its tasks', async () => {
+        mockApi.getTasks.mockResolvedValue({
+            results: [{ ...fixtures.tasks.basic, content: 'Ship it', projectId: 'unjoined1' }],
+            nextCursor: null,
+        })
+
+        await createProgram().parseAsync(['node', 'td', 'project', 'view', 'id:unjoined1'])
+
+        expect(mockApi.getTasks).toHaveBeenCalledWith({ projectId: 'unjoined1' })
+        const output = consoleSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
+        expect(output).toContain('Other Team Backlog')
+        expect(output).toContain('Ship it')
+    })
+
+    it.each([
+        ['progress', () => expect(mockApi.getProjectProgress).toHaveBeenCalledWith('unjoined1')],
+        ['health', () => expect(mockApi.getProjectHealth).toHaveBeenCalledWith('unjoined1')],
+        [
+            'activity-stats',
+            () => expect(mockApi.getProjectActivityStats).toHaveBeenCalledWith('unjoined1', {}),
+        ],
+        [
+            'collaborators',
+            () =>
+                expect(mockApi.getWorkspaceUsers).toHaveBeenCalledWith(
+                    expect.objectContaining({ workspaceId: 'ws-1' }),
+                ),
+        ],
+        [
+            'browse',
+            () =>
+                expect(mockOpenInBrowser).toHaveBeenCalledWith(
+                    'https://app.todoist.com/app/project/unjoined1',
+                ),
+        ],
+    ])('project %s reads it', async (subcommand, expectRead) => {
+        await createProgram().parseAsync(['node', 'td', 'project', subcommand, 'id:unjoined1'])
+
+        expectRead()
+    })
+
+    it('project archive still needs the user to join first', async () => {
+        await expect(
+            createProgram().parseAsync(['node', 'td', 'project', 'archive', 'id:unjoined1']),
+        ).rejects.toThrow('HTTP 404: Not Found')
+        expect(mockApi.getFullProject).not.toHaveBeenCalled()
+        expect(mockApi.archiveProject).not.toHaveBeenCalled()
     })
 })
 
