@@ -56,7 +56,7 @@ const KNOWN_SAFE_API_METHODS = new Set([
     'getProjectProgress',
     'getWorkspaceInsights',
     // Templates (export is read-only)
-    'exportTemplateAsFile',
+    'exportProjectAsCsv',
     'exportTemplateAsUrl',
     // Reminders (REST read)
     'getReminders',

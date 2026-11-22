@@ -39,7 +39,7 @@ export async function importTemplateFile(
     const api = await getApi()
     const project = await resolveProjectRef(api, projectRef)
 
-    const result = await api.importTemplateIntoProject({
+    const result = await api.importCsvIntoProject({
         projectId: project.id,
         file,
         fileName,

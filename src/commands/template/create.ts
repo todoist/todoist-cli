@@ -47,7 +47,7 @@ export async function createFromTemplate(options: CreateFromTemplateOptions): Pr
         workspaceId = workspace.id
     }
 
-    const result = await api.createProjectFromTemplate({
+    const result = await api.addProjectFromCsv({
         name: options.name,
         file,
         fileName,

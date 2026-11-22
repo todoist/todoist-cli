@@ -80,7 +80,7 @@ describe('permissions', () => {
         expect(isMutatingApiMethod('getSections')).toBe(false)
         expect(isMutatingApiMethod('getComments')).toBe(false)
         expect(isMutatingApiMethod('viewAttachment')).toBe(false)
-        expect(isMutatingApiMethod('exportTemplateAsFile')).toBe(false)
+        expect(isMutatingApiMethod('exportProjectAsCsv')).toBe(false)
         expect(isMutatingApiMethod('getReminders')).toBe(false)
         expect(isMutatingApiMethod('getWorkspaceInsights')).toBe(false)
         expect(isMutatingApiMethod('getBackups')).toBe(false)

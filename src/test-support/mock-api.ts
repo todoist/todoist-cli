@@ -138,9 +138,9 @@ export function createMockApi(overrides: Partial<TodoistApi> = {}): MockApi {
             updateInProgress: true,
         }),
         // Templates
-        exportTemplateAsFile: vi.fn().mockResolvedValue(''),
+        exportProjectAsCsv: vi.fn().mockResolvedValue(''),
         exportTemplateAsUrl: vi.fn().mockResolvedValue({ fileName: '', fileUrl: '' }),
-        createProjectFromTemplate: vi.fn().mockResolvedValue({
+        addProjectFromCsv: vi.fn().mockResolvedValue({
             status: 'ok',
             projectId: '',
             templateType: 'project',
@@ -149,7 +149,7 @@ export function createMockApi(overrides: Partial<TodoistApi> = {}): MockApi {
             tasks: [],
             comments: [],
         }),
-        importTemplateIntoProject: vi.fn().mockResolvedValue({
+        importCsvIntoProject: vi.fn().mockResolvedValue({
             status: 'ok',
             templateType: 'project',
             projects: [],

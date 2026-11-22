@@ -48,13 +48,13 @@ describe('template', () => {
     describe('export-file', () => {
         it('exports template as CSV to stdout', async () => {
             const program = createProgram()
-            mockApi.exportTemplateAsFile.mockResolvedValue('task,priority\nBuy milk,4')
+            mockApi.exportProjectAsCsv.mockResolvedValue('task,priority\nBuy milk,4')
             const stdoutSpy = captureStream()
 
             await program.parseAsync(['node', 'td', 'template', 'export-file', 'Work'])
 
             expect(mockResolveProjectRef).toHaveBeenCalledWith(mockApi, 'Work')
-            expect(mockApi.exportTemplateAsFile).toHaveBeenCalledWith({
+            expect(mockApi.exportProjectAsCsv).toHaveBeenCalledWith({
                 projectId: fixtures.projects.work.id,
                 useRelativeDates: undefined,
             })
@@ -63,7 +63,7 @@ describe('template', () => {
 
         it('writes template to file with --output', async () => {
             const program = createProgram()
-            mockApi.exportTemplateAsFile.mockResolvedValue('task,priority\nBuy milk,4')
+            mockApi.exportProjectAsCsv.mockResolvedValue('task,priority\nBuy milk,4')
 
             await program.parseAsync([
                 'node',
@@ -85,7 +85,7 @@ describe('template', () => {
 
         it('passes --relative-dates flag', async () => {
             const program = createProgram()
-            mockApi.exportTemplateAsFile.mockResolvedValue('content')
+            mockApi.exportProjectAsCsv.mockResolvedValue('content')
             captureStream()
 
             await program.parseAsync([
@@ -97,7 +97,7 @@ describe('template', () => {
                 '--relative-dates',
             ])
 
-            expect(mockApi.exportTemplateAsFile).toHaveBeenCalledWith({
+            expect(mockApi.exportProjectAsCsv).toHaveBeenCalledWith({
                 projectId: fixtures.projects.work.id,
                 useRelativeDates: true,
             })
@@ -105,7 +105,7 @@ describe('template', () => {
 
         it('outputs JSON with --json', async () => {
             const program = createProgram()
-            mockApi.exportTemplateAsFile.mockResolvedValue('csv content')
+            mockApi.exportProjectAsCsv.mockResolvedValue('csv content')
 
             await program.parseAsync(['node', 'td', 'template', 'export-file', 'Work', '--json'])
 
@@ -116,7 +116,7 @@ describe('template', () => {
 
         it('accepts --project flag', async () => {
             const program = createProgram()
-            mockApi.exportTemplateAsFile.mockResolvedValue('content')
+            mockApi.exportProjectAsCsv.mockResolvedValue('content')
             captureStream()
 
             await program.parseAsync(['node', 'td', 'template', 'export-file', '--project', 'Work'])
@@ -172,7 +172,7 @@ describe('template', () => {
 
         it('creates project from template file', async () => {
             const program = createProgram()
-            mockApi.createProjectFromTemplate.mockResolvedValue({
+            mockApi.addProjectFromCsv.mockResolvedValue({
                 status: 'ok',
                 projectId: 'new-proj-1',
                 templateType: 'project',
@@ -193,7 +193,7 @@ describe('template', () => {
                 '/tmp/template.csv',
             ])
 
-            const createArg = mockApi.createProjectFromTemplate.mock.calls[0][0]
+            const createArg = mockApi.addProjectFromCsv.mock.calls[0][0]
             expect(createArg).toMatchObject({
                 name: 'My Project',
                 fileName: 'template.csv',
@@ -206,9 +206,9 @@ describe('template', () => {
             )
         })
 
-        it('forwards --file-name to api.createProjectFromTemplate (overrides basename)', async () => {
+        it('forwards --file-name to api.addProjectFromCsv (overrides basename)', async () => {
             const program = createProgram()
-            mockApi.createProjectFromTemplate.mockResolvedValue({
+            mockApi.addProjectFromCsv.mockResolvedValue({
                 status: 'ok',
                 projectId: 'new-proj-1',
                 templateType: 'project',
@@ -231,7 +231,7 @@ describe('template', () => {
                 'override.csv',
             ])
 
-            const createArg = mockApi.createProjectFromTemplate.mock.calls[0][0]
+            const createArg = mockApi.addProjectFromCsv.mock.calls[0][0]
             expect(createArg.fileName).toBe('override.csv')
         })
 
@@ -241,7 +241,7 @@ describe('template', () => {
                 id: 'ws-1',
                 name: 'My Workspace',
             } as Awaited<ReturnType<typeof resolveWorkspaceRef>>)
-            mockApi.createProjectFromTemplate.mockResolvedValue({
+            mockApi.addProjectFromCsv.mockResolvedValue({
                 status: 'ok',
                 projectId: 'new-proj-1',
                 templateType: 'project',
@@ -265,14 +265,14 @@ describe('template', () => {
             ])
 
             expect(mockResolveWorkspaceRef).toHaveBeenCalledWith('My Workspace')
-            expect(mockApi.createProjectFromTemplate).toHaveBeenCalledWith(
+            expect(mockApi.addProjectFromCsv).toHaveBeenCalledWith(
                 expect.objectContaining({ workspaceId: 'ws-1' }),
             )
         })
 
         it('outputs JSON with --json', async () => {
             const program = createProgram()
-            mockApi.createProjectFromTemplate.mockResolvedValue({
+            mockApi.addProjectFromCsv.mockResolvedValue({
                 status: 'ok',
                 projectId: 'new-proj-1',
                 templateType: 'project',
@@ -316,7 +316,7 @@ describe('template', () => {
             ])
 
             expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[dry-run]'))
-            expect(mockApi.createProjectFromTemplate).not.toHaveBeenCalled()
+            expect(mockApi.addProjectFromCsv).not.toHaveBeenCalled()
         })
 
         it('errors when file does not exist', async () => {
@@ -355,7 +355,7 @@ describe('template', () => {
 
         it('imports template file into project', async () => {
             const program = createProgram()
-            mockApi.importTemplateIntoProject.mockResolvedValue({
+            mockApi.importCsvIntoProject.mockResolvedValue({
                 status: 'ok',
                 templateType: 'project',
                 projects: [],
@@ -375,7 +375,7 @@ describe('template', () => {
             ])
 
             expect(mockResolveProjectRef).toHaveBeenCalledWith(mockApi, 'Work')
-            const importArg = mockApi.importTemplateIntoProject.mock.calls[0][0]
+            const importArg = mockApi.importCsvIntoProject.mock.calls[0][0]
             expect(importArg).toMatchObject({
                 projectId: fixtures.projects.work.id,
                 fileName: 'template.csv',
@@ -385,9 +385,9 @@ describe('template', () => {
             expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('1 tasks'))
         })
 
-        it('forwards --file-name to api.importTemplateIntoProject (overrides basename)', async () => {
+        it('forwards --file-name to api.importCsvIntoProject (overrides basename)', async () => {
             const program = createProgram()
-            mockApi.importTemplateIntoProject.mockResolvedValue({
+            mockApi.importCsvIntoProject.mockResolvedValue({
                 status: 'ok',
                 templateType: 'project',
                 projects: [],
@@ -408,13 +408,13 @@ describe('template', () => {
                 'override.csv',
             ])
 
-            const importArg = mockApi.importTemplateIntoProject.mock.calls[0][0]
+            const importArg = mockApi.importCsvIntoProject.mock.calls[0][0]
             expect(importArg.fileName).toBe('override.csv')
         })
 
         it('outputs JSON with --json', async () => {
             const program = createProgram()
-            mockApi.importTemplateIntoProject.mockResolvedValue({
+            mockApi.importCsvIntoProject.mockResolvedValue({
                 status: 'ok',
                 templateType: 'project',
                 projects: [],
@@ -454,7 +454,7 @@ describe('template', () => {
             ])
 
             expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[dry-run]'))
-            expect(mockApi.importTemplateIntoProject).not.toHaveBeenCalled()
+            expect(mockApi.importCsvIntoProject).not.toHaveBeenCalled()
         })
 
         it('errors with FILE_NOT_FOUND when the --file path does not exist', async () => {

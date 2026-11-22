@@ -18,7 +18,7 @@ export async function exportTemplateFile(
     const api = await getApi()
     const project = await resolveProjectRef(api, projectRef)
 
-    const content = await api.exportTemplateAsFile({
+    const content = await api.exportProjectAsCsv({
         projectId: project.id,
         useRelativeDates: options.relativeDates,
     })
