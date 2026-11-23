@@ -11,7 +11,7 @@ const CI_ENV = { CI: 'true' }
 
 /** Every check the pull-request workflows in CHECKED_WORKFLOWS run, with one shared build. */
 export const VERIFY_STEPS: Step[] = [
-    { name: 'lint', command: bin('oxlint'), args: ['src', '.agents/scripts'] },
+    { name: 'lint', command: bin('oxlint'), args: ['src', '.agents/scripts', '.pi'] },
     { name: 'format', command: bin('oxfmt'), args: ['--check'] },
     { name: 'types', command: bin('tsc'), args: ['--noEmit'] },
     { name: 'types:tools', command: bin('tsc'), args: ['--noEmit', '-p', '.agents/scripts'] },

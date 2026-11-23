@@ -6,7 +6,7 @@ import { isolatedEnv, REPO_ROOT } from './lib/test-repo.ts'
 
 // Agent tooling is development-only. `scripts/` ships in the npm package, so the tooling
 // lives in `.agents/`, and must never be published.
-const DEV_ONLY = ['.agents/', '.claude/', '.codex/', '.cursor/', '.tmp/']
+const DEV_ONLY = ['.agents/', '.claude/', '.codex/', '.cursor/', '.pi/', '.tmp/']
 
 // npm pack takes several seconds, more when `npm run verify` runs other checks alongside.
 it('keeps agent tooling out of the published package', { timeout: 30_000 }, () => {
