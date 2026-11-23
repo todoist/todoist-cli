@@ -140,4 +140,40 @@ describe('createTodoistUserRecordStore', () => {
         // resolver would keep targeting an orphan id).
         expect(persisted.user).toBeUndefined()
     })
+
+    it('round-trips the refresh token and expiry fields of an OAuth token bundle', async () => {
+        const { createTodoistUserRecordStore } = await import('./user-records.js')
+        const store = createTodoistUserRecordStore()
+        await store.upsert({
+            account: ACCOUNT_A,
+            fallbackToken: 'access-plaintext',
+            fallbackRefreshToken: 'refresh-plaintext',
+            accessTokenExpiresAt: 1_800_000_000_000,
+            refreshTokenExpiresAt: 1_900_000_000_000,
+            hasRefreshToken: true,
+        })
+
+        const persisted = readPersisted() as { users: Record<string, unknown>[] }
+        expect(persisted.users[0]).toEqual({
+            id: '111',
+            email: 'a@example.com',
+            auth_mode: 'read-write',
+            auth_scope: 'data:read_write',
+            api_token: 'access-plaintext',
+            refresh_token: 'refresh-plaintext',
+            access_token_expires_at: 1_800_000_000_000,
+            refresh_token_expires_at: 1_900_000_000_000,
+            has_refresh_token: true,
+        })
+        expect(await store.list()).toEqual([
+            {
+                account: ACCOUNT_A,
+                fallbackToken: 'access-plaintext',
+                fallbackRefreshToken: 'refresh-plaintext',
+                accessTokenExpiresAt: 1_800_000_000_000,
+                refreshTokenExpiresAt: 1_900_000_000_000,
+                hasRefreshToken: true,
+            },
+        ])
+    })
 })

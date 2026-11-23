@@ -335,10 +335,21 @@ env `TODOIST_API_TOKEN` first, then a config-derived target user, then either
 `StoredUser.api_token` (plaintext keyring-offline fallback) or cli-core's
 `createSecureStore` for the keyring slot.
 
+Expiring tokens: a user record with `access_token_expires_at` holds an OAuth
+access token that expires, with its refresh token in the keyring slot
+`user-<id>/refresh` (or `refresh_token` in plaintext). Records without it hold
+tokens that never expire and are read exactly as above. `auth.ts` refreshes a
+token within `REFRESH_SKEW_MS` of expiring before returning it, loading
+`auth-refresh.ts` (cli-core's `refreshAccessToken`, with a lock file next to
+the config) only then. `getApi()` wraps a refreshable account's fetch with
+`api/refreshing-fetch.ts`, which retries a 401 once with a rotated token, and
+`auth status` / `auth token view` take the same `getTokenRefreshOptions()`.
+
 Write/clear/list all route through `createTodoistTokenStore()`; commands never
 write the config directly. `auth logout` and `auth token view` use
 `withUserRefAware` (`commands/auth/store-wrap.ts`) to substitute the
-global `--user <ref>` that `index.ts` strips from argv before commander runs.
+global `--user <ref>` that `index.ts` strips from argv before commander runs
+(on `active`, `activeBundle` and `clear`).
 
 v1 → v2 migration (`migrate-auth.ts` → cli-core's `migrateLegacyAuth`) runs
 from `postinstall.ts`. Gate is `config.config_version === CONFIG_VERSION`,

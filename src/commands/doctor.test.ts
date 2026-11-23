@@ -228,6 +228,38 @@ describe('doctor command', () => {
         expect(process.exitCode).toBeUndefined()
     })
 
+    it('accepts the refresh fields on a stored user and reports them when malformed', async () => {
+        mockReadFile.mockResolvedValue(
+            JSON.stringify({
+                config_version: 2,
+                users: [
+                    {
+                        id: '1',
+                        email: 'person@example.com',
+                        refresh_token: 42,
+                        access_token_expires_at: 'soon',
+                        refresh_token_expires_at: 1_900_000_000_000,
+                        has_refresh_token: 'yes',
+                    },
+                ],
+            }),
+        )
+        mockFetch('1.0.0')
+
+        await createProgram().parseAsync(['node', 'td', 'doctor'])
+
+        const configWarning = consoleSpy.mock.calls.find(
+            (call: unknown[]) =>
+                typeof call[0] === 'string' &&
+                (call[0] as string).includes('WARN Config file is readable but'),
+        )?.[0] as string
+        expect(configWarning).not.toContain('unrecognized key')
+        expect(configWarning).toContain('users[0].refresh_token must be a string')
+        expect(configWarning).toContain('users[0].access_token_expires_at must be a number')
+        expect(configWarning).not.toContain('refresh_token_expires_at must be a number')
+        expect(configWarning).toContain('users[0].has_refresh_token must be a boolean')
+    })
+
     it('warns when config fields are invalid or unrecognized', async () => {
         mockReadFile.mockResolvedValue(
             JSON.stringify({

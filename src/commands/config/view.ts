@@ -188,16 +188,27 @@ function formatConfigView(
     return lines.join('\n')
 }
 
+/**
+ * `--show-token` reveals the access token, which is what scripts need. A
+ * plaintext refresh token stays masked either way: nothing outside the CLI
+ * should use it, and printing it would let a copy race the CLI's own refresh.
+ */
 function maskConfigForJson(config: Config, showToken: boolean): Config {
-    if (showToken) return config
     const masked: Config = { ...config }
-    if (typeof masked.api_token === 'string') {
+    if (!showToken && typeof masked.api_token === 'string') {
         masked.api_token = maskToken(masked.api_token)
     }
     if (Array.isArray(masked.users)) {
-        masked.users = masked.users.map((u) =>
-            typeof u.api_token === 'string' ? { ...u, api_token: maskToken(u.api_token) } : u,
-        )
+        masked.users = masked.users.map((u) => {
+            const user = { ...u }
+            if (!showToken && typeof user.api_token === 'string') {
+                user.api_token = maskToken(user.api_token)
+            }
+            if (typeof user.refresh_token === 'string') {
+                user.refresh_token = maskToken(user.refresh_token)
+            }
+            return user
+        })
     }
     return masked
 }

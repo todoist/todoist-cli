@@ -288,6 +288,7 @@ describe('user command', () => {
                 token: 'envtoken',
                 authMode: 'unknown',
                 source: 'env',
+                canRefresh: false,
             })
 
             await createProgram().parseAsync(['node', 'td', 'accounts', 'current'])
@@ -302,6 +303,7 @@ describe('user command', () => {
                 token: 'legacytoken',
                 authMode: 'unknown',
                 source: 'config-file',
+                canRefresh: false,
             })
 
             await createProgram().parseAsync(['node', 'td', 'accounts', 'current'])
@@ -318,6 +320,7 @@ describe('user command', () => {
                 token: 'envtoken',
                 authMode: 'unknown',
                 source: 'env',
+                canRefresh: false,
             })
 
             await createProgram().parseAsync(['node', 'td', 'accounts', 'current', '--ndjson'])

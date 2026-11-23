@@ -1,5 +1,6 @@
 import { attachTokenViewCommand } from '@todoist/cli-core/auth'
 import type { Command } from 'commander'
+import { getTokenRefreshOptions } from '../../lib/auth-refresh.js'
 import {
     createTodoistTokenStore,
     parseCredentialStore,
@@ -49,6 +50,9 @@ export function registerAuthCommand(program: Command): void {
         name: 'view',
         store: refAware,
         envVarName: TOKEN_ENV_VAR,
+        // An expiring token is rotated first, so a script never gets one that
+        // is about to stop working.
+        refresh: getTokenRefreshOptions(),
         description:
             'Print the stored API token for the active user (or --user <ref>) to stdout for use in scripts',
     })

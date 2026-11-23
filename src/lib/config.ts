@@ -55,8 +55,13 @@ export type AuthFlag = (typeof AUTH_FLAG_ORDER)[number]
 
 /**
  * Per-user record stored in `config.users`. The token itself lives in the OS
- * credential manager under account `user-<id>`; `api_token` only appears here
- * when plaintext storage is explicitly selected.
+ * credential manager under account `user-<id>` (and a refresh token, when
+ * there is one, under `user-<id>/refresh`); `api_token` and `refresh_token`
+ * only appear here when plaintext storage is explicitly selected.
+ *
+ * The expiry fields (unix-epoch ms) and `has_refresh_token` are only set for
+ * OAuth clients that issue expiring access tokens. A record without
+ * `access_token_expires_at` holds a token that never expires.
  */
 export interface StoredUser {
     id: string
@@ -65,6 +70,10 @@ export interface StoredUser {
     auth_scope?: string
     auth_flags?: AuthFlag[]
     api_token?: string
+    refresh_token?: string
+    access_token_expires_at?: number
+    refresh_token_expires_at?: number
+    has_refresh_token?: boolean
     pendingSecureStoreClear?: boolean
 }
 
@@ -109,6 +118,10 @@ const KNOWN_STORED_USER_KEYS: ReadonlySet<string> = new Set([
     'auth_scope',
     'auth_flags',
     'api_token',
+    'refresh_token',
+    'access_token_expires_at',
+    'refresh_token_expires_at',
+    'has_refresh_token',
     'pendingSecureStoreClear',
 ])
 
@@ -271,6 +284,24 @@ export function validateConfigForDoctor(config: Record<string, unknown>): string
                 }
                 if (entry.api_token !== undefined && typeof entry.api_token !== 'string') {
                     issues.push(`users[${i}].api_token must be a string`)
+                }
+                if (entry.refresh_token !== undefined && typeof entry.refresh_token !== 'string') {
+                    issues.push(`users[${i}].refresh_token must be a string`)
+                }
+                for (const key of ['access_token_expires_at', 'refresh_token_expires_at']) {
+                    const value = entry[key]
+                    if (
+                        value !== undefined &&
+                        (typeof value !== 'number' || !Number.isFinite(value))
+                    ) {
+                        issues.push(`users[${i}].${key} must be a number`)
+                    }
+                }
+                if (
+                    entry.has_refresh_token !== undefined &&
+                    typeof entry.has_refresh_token !== 'boolean'
+                ) {
+                    issues.push(`users[${i}].has_refresh_token must be a boolean`)
                 }
                 if (
                     entry.pendingSecureStoreClear !== undefined &&

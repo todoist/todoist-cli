@@ -18,6 +18,10 @@ interface KeyringMockState {
     constructed: { service: string; account: string }[]
 }
 
+function isRefreshLock(path: string): boolean {
+    return path === `${TEST_CONFIG_PATH}.refresh.lock`
+}
+
 function entryFor(state: KeyringMockState, account: string): KeyringEntryState {
     let e = state.entries.get(account)
     if (!e) {
@@ -33,6 +37,7 @@ describe('lib/auth', () => {
     let readFileMock: ReturnType<typeof vi.fn>
     let unlinkMock: ReturnType<typeof vi.fn>
     let writeFileMock: ReturnType<typeof vi.fn>
+    let lockContent: string | null
     let keyring: KeyringMockState
     let errorSpy: ReturnType<typeof vi.spyOn>
 
@@ -42,19 +47,31 @@ describe('lib/auth', () => {
         vi.unstubAllEnvs()
 
         configContent = null
+        lockContent = null
         keyring = {
             entries: new Map(),
             constructed: [],
         }
 
         mkdirMock = vi.fn().mockResolvedValue(undefined)
-        readFileMock = vi.fn().mockImplementation(async () => {
+        // The token refresh lock sits next to the config file, so reads and
+        // deletes route by path: releasing the lock must not delete the config.
+        readFileMock = vi.fn().mockImplementation(async (path: string) => {
+            if (isRefreshLock(path)) {
+                if (lockContent === null) throw createErrnoError('ENOENT')
+                return lockContent
+            }
             if (configContent === null) {
                 throw createErrnoError('ENOENT')
             }
             return configContent
         })
-        unlinkMock = vi.fn().mockImplementation(async () => {
+        unlinkMock = vi.fn().mockImplementation(async (path: string) => {
+            if (isRefreshLock(path)) {
+                if (lockContent === null) throw createErrnoError('ENOENT')
+                lockContent = null
+                return
+            }
             if (configContent === null) {
                 throw createErrnoError('ENOENT')
             }
@@ -74,6 +91,18 @@ describe('lib/auth', () => {
             readFile: readFileMock,
             unlink: unlinkMock,
             writeFile: writeFileMock,
+            open: vi.fn().mockImplementation(async (path: string) => {
+                if (!isRefreshLock(path)) throw new Error(`unexpected open: ${path}`)
+                if (lockContent !== null) throw createErrnoError('EEXIST')
+                lockContent = ''
+                return {
+                    writeFile: async (content: string) => {
+                        lockContent = content
+                    },
+                    close: async () => {},
+                }
+            }),
+            stat: vi.fn().mockImplementation(async () => ({ mtimeMs: Date.now() })),
         }))
 
         // Override @todoist/cli-core's getConfigPath at the package boundary so
@@ -386,6 +415,143 @@ describe('lib/auth', () => {
         await expect(getAuthMetadata()).resolves.toEqual({
             authMode: 'unknown',
             source: 'secure-store',
+        })
+    })
+
+    // --- expiring OAuth tokens ------------------------------------------------
+
+    describe('expiring OAuth tokens', () => {
+        const TOKEN_URL = 'https://todoist.com/oauth/access_token'
+        let fetchTodoistMock: ReturnType<typeof vi.fn>
+
+        beforeEach(() => {
+            fetchTodoistMock = vi.fn()
+            vi.doMock('./usage-tracking.js', async (importOriginal) => ({
+                ...(await importOriginal<typeof import('./usage-tracking.js')>()),
+                fetchTodoist: fetchTodoistMock,
+            }))
+        })
+
+        function plaintextUser(overrides: Record<string, unknown> = {}) {
+            return {
+                id: '111',
+                email: 'a@b.c',
+                auth_mode: 'read-write',
+                api_token: 'old-access',
+                ...overrides,
+            }
+        }
+
+        function tokenResponse(body: Record<string, unknown>): Response {
+            return new Response(JSON.stringify(body), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            })
+        }
+
+        function persistedUser(): Record<string, unknown> {
+            return (JSON.parse(configContent as string) as { users: Record<string, unknown>[] })
+                .users[0]
+        }
+
+        it('refreshes a token that expires within a minute and saves the rotated tokens', async () => {
+            setConfig({
+                config_version: 2,
+                users: [
+                    plaintextUser({
+                        refresh_token: 'old-refresh',
+                        access_token_expires_at: Date.now() + 30_000,
+                        has_refresh_token: true,
+                    }),
+                ],
+            })
+            fetchTodoistMock.mockResolvedValue(
+                tokenResponse({
+                    access_token: 'new-access',
+                    refresh_token: 'new-refresh',
+                    token_type: 'Bearer',
+                    expires_in: 3600,
+                }),
+            )
+
+            const { getApiToken } = await import('./auth.js')
+            const before = Date.now()
+
+            await expect(getApiToken()).resolves.toBe('new-access')
+
+            expect(fetchTodoistMock).toHaveBeenCalledTimes(1)
+            const [url, init] = fetchTodoistMock.mock.calls[0] as [string, RequestInit]
+            expect(String(url)).toBe(TOKEN_URL)
+            expect(Object.fromEntries(new URLSearchParams(String(init.body)))).toMatchObject({
+                grant_type: 'refresh_token',
+                refresh_token: 'old-refresh',
+                client_id: '04863cc1e3584830a578622f50224d5b',
+            })
+            expect(persistedUser()).toMatchObject({
+                api_token: 'new-access',
+                refresh_token: 'new-refresh',
+                has_refresh_token: true,
+            })
+            const expiresAt = persistedUser().access_token_expires_at as number
+            expect(expiresAt).toBeGreaterThanOrEqual(before + 3_600_000)
+            expect(expiresAt).toBeLessThanOrEqual(Date.now() + 3_600_000)
+            // The lock is released, so the next refresh can take it.
+            expect(lockContent).toBeNull()
+        })
+
+        it('never refreshes a token with no stored expiry', async () => {
+            setConfig({ config_version: 2, users: [plaintextUser()] })
+
+            const { getApiToken } = await import('./auth.js')
+
+            await expect(getApiToken()).resolves.toBe('old-access')
+            expect(fetchTodoistMock).not.toHaveBeenCalled()
+        })
+
+        it('keeps using an expiring token it cannot refresh until it has expired', async () => {
+            setConfig({
+                config_version: 2,
+                users: [plaintextUser({ access_token_expires_at: Date.now() + 30_000 })],
+            })
+
+            const { getApiToken } = await import('./auth.js')
+
+            await expect(getApiToken()).resolves.toBe('old-access')
+            expect(fetchTodoistMock).not.toHaveBeenCalled()
+        })
+
+        it('asks for a new login once a token it cannot refresh has expired', async () => {
+            setConfig({
+                config_version: 2,
+                users: [plaintextUser({ access_token_expires_at: Date.now() - 1_000 })],
+            })
+
+            const { getApiToken } = await import('./auth.js')
+
+            await expect(getApiToken()).rejects.toMatchObject({
+                code: 'NO_TOKEN',
+                hints: ['Run: td auth login'],
+            })
+            expect(fetchTodoistMock).not.toHaveBeenCalled()
+        })
+
+        it('keeps the stored token when a refresh fails to connect before it expires', async () => {
+            setConfig({
+                config_version: 2,
+                users: [
+                    plaintextUser({
+                        refresh_token: 'old-refresh',
+                        access_token_expires_at: Date.now() + 30_000,
+                        has_refresh_token: true,
+                    }),
+                ],
+            })
+            fetchTodoistMock.mockRejectedValue(new TypeError('fetch failed'))
+
+            const { getApiToken } = await import('./auth.js')
+
+            await expect(getApiToken()).resolves.toBe('old-access')
+            expect(persistedUser()).toMatchObject({ refresh_token: 'old-refresh' })
         })
     })
 

@@ -48,7 +48,18 @@ export interface ResolvedUser {
     authScope?: string
     authFlags?: AuthFlag[]
     source: AuthMetadata['source']
+    /**
+     * The stored credential has a refresh token, so a request the API refuses
+     * with a 401 can be retried with a rotated access token.
+     */
+    canRefresh: boolean
 }
+
+/**
+ * Refresh an expiring access token when it has less than this left, so a
+ * command doesn't start a request with a token that expires before it lands.
+ */
+export const REFRESH_SKEW_MS = 60_000
 
 export class NoTokenError extends CliError {
     constructor() {
@@ -75,7 +86,14 @@ export class NoTokenError extends CliError {
 export async function resolveActiveUser(opts: { ref?: string } = {}): Promise<ResolvedUser> {
     const envToken = process.env[TOKEN_ENV_VAR]
     if (envToken) {
-        return { id: 'env', email: '', token: envToken, authMode: 'unknown', source: 'env' }
+        return {
+            id: 'env',
+            email: '',
+            token: envToken,
+            authMode: 'unknown',
+            source: 'env',
+            canRefresh: false,
+        }
     }
 
     const config = await readConfig()
@@ -103,6 +121,7 @@ export async function resolveActiveUser(opts: { ref?: string } = {}): Promise<Re
         authScope: target.auth_scope,
         authFlags: target.auth_flags,
         source,
+        canRefresh: hasRefreshToken(target),
     }
 }
 
@@ -138,7 +157,62 @@ export async function listStoredUsers(): Promise<StoredUser[]> {
     return getStoredUsers(await readConfig())
 }
 
+function hasRefreshToken(user: StoredUser): boolean {
+    return user.has_refresh_token === true || Boolean(user.refresh_token?.trim())
+}
+
+/**
+ * Load the stored token, refreshing it first when it expires within
+ * `REFRESH_SKEW_MS`. A record without `access_token_expires_at` holds a token
+ * that never expires, so it is read exactly as it always was: no refresh, no
+ * lock, no network.
+ */
 async function loadTokenForStoredUser(
+    user: StoredUser,
+): Promise<{ token: string; source: 'secure-store' | 'config-file' }> {
+    const expiresAt = user.access_token_expires_at
+    if (expiresAt !== undefined && expiresAt - Date.now() < REFRESH_SKEW_MS) {
+        if (hasRefreshToken(user)) {
+            const refreshed = await refreshExpiringToken(user.id, expiresAt)
+            if (refreshed) {
+                // A refresh keeps the credential where it was stored.
+                return {
+                    token: refreshed,
+                    source: user.api_token?.trim() ? 'config-file' : 'secure-store',
+                }
+            }
+        } else if (expiresAt <= Date.now()) {
+            throw new CliError(
+                'NO_TOKEN',
+                `The stored token for ${user.email} has expired and cannot be refreshed.`,
+                ['Run: td auth login'],
+            )
+        }
+    }
+    return loadStoredToken(user)
+}
+
+/**
+ * Rotate an expiring token. Returns `undefined` when the refresh couldn't
+ * reach Todoist but the stored token hasn't expired yet: it still works, and
+ * the next command tries again. Every other failure propagates, since a
+ * rejected refresh token means signing in again.
+ */
+async function refreshExpiringToken(
+    userId: string,
+    expiresAt: number,
+): Promise<string | undefined> {
+    const { refreshStoredToken } = await import('./auth-refresh.js')
+    try {
+        return await refreshStoredToken(userId)
+    } catch (error) {
+        const transient = (error as { code?: unknown }).code === 'AUTH_REFRESH_TRANSIENT'
+        if (transient && expiresAt > Date.now()) return undefined
+        throw error
+    }
+}
+
+async function loadStoredToken(
     user: StoredUser,
 ): Promise<{ token: string; source: 'secure-store' | 'config-file' }> {
     if (user.api_token?.trim()) {

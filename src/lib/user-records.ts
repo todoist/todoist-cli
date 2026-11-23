@@ -21,6 +21,18 @@ function recordToStoredUser(record: UserRecord<TodoistAccount>): StoredUser {
     if (record.fallbackToken !== undefined) {
         stored.api_token = record.fallbackToken
     }
+    if (record.fallbackRefreshToken !== undefined) {
+        stored.refresh_token = record.fallbackRefreshToken
+    }
+    if (record.accessTokenExpiresAt !== undefined) {
+        stored.access_token_expires_at = record.accessTokenExpiresAt
+    }
+    if (record.refreshTokenExpiresAt !== undefined) {
+        stored.refresh_token_expires_at = record.refreshTokenExpiresAt
+    }
+    if (record.hasRefreshToken !== undefined) {
+        stored.has_refresh_token = record.hasRefreshToken
+    }
     return stored
 }
 
@@ -36,6 +48,18 @@ function storedUserToRecord(user: StoredUser): UserRecord<TodoistAccount> {
     }
     if (user.api_token !== undefined) {
         record.fallbackToken = user.api_token
+    }
+    if (user.refresh_token !== undefined) {
+        record.fallbackRefreshToken = user.refresh_token
+    }
+    if (user.access_token_expires_at !== undefined) {
+        record.accessTokenExpiresAt = user.access_token_expires_at
+    }
+    if (user.refresh_token_expires_at !== undefined) {
+        record.refreshTokenExpiresAt = user.refresh_token_expires_at
+    }
+    if (user.has_refresh_token !== undefined) {
+        record.hasRefreshToken = user.has_refresh_token
     }
     return record
 }

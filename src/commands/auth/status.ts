@@ -3,6 +3,7 @@ import { attachStatusCommand } from '@todoist/cli-core/auth'
 import chalk from 'chalk'
 import type { Command } from 'commander'
 import { createApiForToken, getApi } from '../../lib/api/core.js'
+import { getTokenRefreshOptions } from '../../lib/auth-refresh.js'
 import {
     toTodoistAccount,
     type TodoistAccount,
@@ -130,6 +131,7 @@ export function attachTodoistStatusCommand(auth: Command, store: TodoistTokenSto
 
     return attachStatusCommand<TodoistAccount>(auth, {
         store,
+        refresh: getTokenRefreshOptions(),
         description: 'Show current authentication status',
         fetchLive: async ({ token }) => {
             // Snapshot's token only matches the default account when nothing

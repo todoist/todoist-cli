@@ -4,7 +4,7 @@ import { matchUserRef, UserNotFoundError } from '../../lib/users.js'
 
 /**
  * Substitute `getRequestedUserRef()` for missing `ref` arguments on
- * `active` / `clear`. `index.ts` strips `--user` from argv before commander
+ * `active` / `activeBundle` / `clear`. `index.ts` strips `--user` from argv before commander
  * runs, so cli-core's registrars (`attachLogoutCommand`,
  * `attachTokenViewCommand`) can't see the flag on their parsed args; this
  * wrap puts the global selector back into play.
@@ -42,6 +42,13 @@ export function withUserRefAware(store: TodoistTokenStore): TodoistTokenStore {
             const targetRef = ref ?? getRequestedOrEnvUserRef()
             if (targetRef !== undefined) await requireExists(targetRef)
             return store.active(targetRef)
+        },
+        // Same substitution as `active`: with refresh wired in, `token view`
+        // reads (and rotates) the credential through this instead.
+        activeBundle: async (ref?: string) => {
+            const targetRef = ref ?? getRequestedOrEnvUserRef()
+            if (targetRef !== undefined) await requireExists(targetRef)
+            return store.activeBundle(targetRef)
         },
         clear: async (ref?: string) => {
             const targetRef = ref ?? getRequestedUserRef()

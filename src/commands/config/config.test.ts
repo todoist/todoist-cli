@@ -171,6 +171,38 @@ describe('config view', () => {
         expect(json.api_token).toBe('tdo_abcdefghij1234567890')
     })
 
+    it('--json masks a plaintext refresh token, even with --show-token', async () => {
+        presentConfig({
+            config_version: 2,
+            users: [
+                {
+                    id: '1',
+                    email: 'person@example.com',
+                    api_token: 'tdo_abcdefghij1234567890',
+                    refresh_token: 'rt_klmnopqrst0987654321',
+                    access_token_expires_at: 1_800_000_000_000,
+                    has_refresh_token: true,
+                },
+            ],
+        })
+        const consoleSpy = captureConsole()
+
+        await createProgram().parseAsync(['node', 'td', 'config', 'view', '--json'])
+        const masked = JSON.parse(consoleSpy.mock.calls[0][0] as string)
+        expect(masked.users[0]).toMatchObject({
+            api_token: '****…7890',
+            refresh_token: '****…4321',
+        })
+
+        consoleSpy.mockClear()
+        await createProgram().parseAsync(['node', 'td', 'config', 'view', '--json', '--show-token'])
+        const revealed = JSON.parse(consoleSpy.mock.calls[0][0] as string)
+        expect(revealed.users[0]).toMatchObject({
+            api_token: 'tdo_abcdefghij1234567890',
+            refresh_token: '****…4321',
+        })
+    })
+
     it('handles a missing config file gracefully', async () => {
         missingConfig()
         mockProbeApiToken.mockRejectedValue(new NoTokenError())

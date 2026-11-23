@@ -19,8 +19,22 @@ import { getProgressTracker } from '../progress.js'
 import { PROJECT_LIMIT_HINT } from '../project-limit.js'
 import { withSpinner } from '../spinner.js'
 import { createTrackedFetch } from '../usage-tracking.js'
+import { createRefreshingFetch } from './refreshing-fetch.js'
 
 let apiClient: TodoistApi | null = null
+
+/**
+ * Why the last refresh after a 401 failed. The SDK turns a 401 into its own
+ * error with nothing but the status, so `toCliError` reports this instead
+ * when it is set: a rejected refresh token, say, rather than a bare 401.
+ */
+let refreshFailure: unknown
+
+/** Loaded on first use: accounts whose tokens never expire never need it. */
+async function forceRefresh(userId: string): Promise<string> {
+    const { refreshStoredToken } = await import('../auth-refresh.js')
+    return refreshStoredToken(userId, { force: true })
+}
 
 // Mapping of API method names to user-friendly spinner messages
 const API_SPINNER_MESSAGES: Record<string, { text: string; color?: 'blue' | 'green' | 'yellow' }> =
@@ -331,6 +345,9 @@ async function toCliError(error: unknown, methodName?: string): Promise<Error> {
         if (status === 403 && getErrorTag(error) === 'PREMIUM_ONLY') {
             return new CliError('PREMIUM_REQUIRED', describeRequestError(error), [PREMIUM_HINT])
         }
+        if (status === 401 && refreshFailure instanceof Error) {
+            return refreshFailure
+        }
         if (status === 401 || status === 403) {
             return new CliError('AUTH_ERROR', error.message, [
                 'Check your API token: td auth status',
@@ -382,15 +399,32 @@ function analyzeAndEmitApiResponse(
     progressTracker.emitApiResponse(1, false, null)
 }
 
-export function createApiForToken(token: string): TodoistApi {
-    const rawApi = new TodoistApi(token, { customFetch: createTrackedFetch() })
+export function createApiForToken(
+    token: string,
+    options: { refresh?: () => Promise<string> } = {},
+): TodoistApi {
+    const trackedFetch = createTrackedFetch()
+    const customFetch = options.refresh
+        ? createRefreshingFetch({
+              fetch: trackedFetch,
+              token,
+              refresh: options.refresh,
+              onRefreshFailed: (error) => {
+                  refreshFailure = error
+              },
+          })
+        : trackedFetch
+    const rawApi = new TodoistApi(token, { customFetch })
     return createSpinnerWrappedApi(rawApi)
 }
 
 export async function getApi(): Promise<TodoistApi> {
     if (!apiClient) {
         const resolved = await resolveActiveUser()
-        apiClient = createApiForToken(resolved.token)
+        apiClient = createApiForToken(
+            resolved.token,
+            resolved.canRefresh ? { refresh: () => forceRefresh(resolved.id) } : {},
+        )
         // Seed the user-id cache from config when known so callers like
         // `getCurrentUserId` don't pay an extra `api.getUser()` round trip.
         if (resolved.id && resolved.id !== 'env' && resolved.id !== 'legacy') {
