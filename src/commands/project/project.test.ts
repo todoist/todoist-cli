@@ -2111,7 +2111,13 @@ describe('project view --detailed', () => {
             nextCursor: null,
         })
         mockApi.getFullProject.mockResolvedValue({
-            project: { id: 'proj-1', name: 'My Project', color: 'blue', isFavorite: false },
+            project: {
+                id: 'proj-1',
+                name: 'My Project',
+                color: 'blue',
+                icon: 'lightbulb',
+                isFavorite: false,
+            },
             commentsCount: 5,
             tasks: [{ id: 'task-1', content: 'Test task', projectId: 'proj-1' }],
             sections: [{ id: 'sec-1', name: 'Backlog', projectId: 'proj-1', order: 1 }],
@@ -2128,6 +2134,7 @@ describe('project view --detailed', () => {
         expect(allOutput).toContain('Backlog')
         expect(allOutput).toContain('John')
         expect(allOutput).toContain('Comments: 5')
+        expect(allOutput).toContain('Icon:     lightbulb')
         expect(allOutput).toContain('A note')
     })
 

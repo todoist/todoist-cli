@@ -532,6 +532,13 @@ describe('formatJson', () => {
         expect(result.isFavorite).toBe(project.isFavorite)
     })
 
+    it('keeps the project icon in essential fields', async () => {
+        const result = JSON.parse(
+            formatJson({ ...fixtures.projects.work, icon: 'briefcase' }, 'project'),
+        )
+        expect(result.icon).toBe('briefcase')
+    })
+
     it('picks essential fields for label type', async () => {
         const label = fixtures.labels.urgent
         const result = JSON.parse(formatJson(label, 'label'))
