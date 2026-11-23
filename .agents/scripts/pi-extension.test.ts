@@ -1,9 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { writeVerified } from './lib/state.ts'
-import { createTempRepo, type TempRepo } from './lib/test-repo.ts'
-import { codeFingerprint, snapshot } from './lib/tree.ts'
+import { createTempRepo, markVerified, type TempRepo } from './lib/test-repo.ts'
 
 // Drives a copy of .pi/extensions/agent-guard.ts the way Pi does, in its own node process:
 // register the handlers, then call `tool_call` with one event, and print what the handler
@@ -67,12 +65,7 @@ function drive(
 
 const bash = (command: string) => ({ toolName: 'bash', input: { command } })
 
-function commitOnBranch(branch: string, path: string): void {
-    repo.git(['switch', '--quiet', '-c', branch])
-    repo.write(path, 'export const x = 1\n')
-    repo.git(['add', path])
-    repo.git(['commit', '--quiet', '-m', `add ${path}`])
-}
+const commitOnBranch = (branch: string, path: string) => repo.commitOnBranch(branch, path)
 
 beforeEach(() => {
     repo = createTempRepo()
@@ -95,11 +88,7 @@ it("blocks an unverified push through tool_call with the guard's reason", () => 
 
 it('lets the push run once verify has passed on it', () => {
     commitOnBranch('feature', 'src/b.ts')
-    writeVerified(repo.dir, {
-        fingerprint: codeFingerprint(snapshot(repo.dir)),
-        head: 'x',
-        at: 'now',
-    })
+    markVerified(repo.dir)
     expect(drive(bash('git push -u origin HEAD'))).toEqual({ result: null, notes: [], stderr: '' })
 })
 
