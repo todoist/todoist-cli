@@ -37,19 +37,20 @@ export function withUserRefAware(store: TodoistTokenStore): TodoistTokenStore {
         }
     }
 
+    /**
+     * The account a read acts as: the explicit ref, else `--user`, else
+     * `TD_USER`. Shared by `active` and `activeBundle` (which `auth status`
+     * and `auth token view` read and refresh through) so they can't disagree.
+     */
+    async function readRef(ref?: string): Promise<string | undefined> {
+        const targetRef = ref ?? getRequestedOrEnvUserRef()
+        if (targetRef !== undefined) await requireExists(targetRef)
+        return targetRef
+    }
+
     return Object.assign(Object.create(store) as TodoistTokenStore, {
-        active: async (ref?: string) => {
-            const targetRef = ref ?? getRequestedOrEnvUserRef()
-            if (targetRef !== undefined) await requireExists(targetRef)
-            return store.active(targetRef)
-        },
-        // Same substitution as `active`: with refresh wired in, `token view`
-        // reads (and rotates) the credential through this instead.
-        activeBundle: async (ref?: string) => {
-            const targetRef = ref ?? getRequestedOrEnvUserRef()
-            if (targetRef !== undefined) await requireExists(targetRef)
-            return store.activeBundle(targetRef)
-        },
+        active: async (ref?: string) => store.active(await readRef(ref)),
+        activeBundle: async (ref?: string) => store.activeBundle(await readRef(ref)),
         clear: async (ref?: string) => {
             const targetRef = ref ?? getRequestedUserRef()
             if (targetRef !== undefined) await requireExists(targetRef)

@@ -15,21 +15,23 @@ import { loginWithToken } from './token.js'
 export function registerAuthCommand(program: Command): void {
     const auth = program.command('auth').description('Manage authentication')
 
-    // `store` is the raw cli-core `TokenStore` used by status, with an
-    // env-token short-circuit on authenticated reads. Login creates its own
-    // store so its --credential-store choice controls the write policy.
+    // `store` is the raw cli-core `TokenStore`, with an env-token
+    // short-circuit on authenticated reads. Login creates its own store so
+    // its --credential-store choice controls the write policy.
     //
     //   - `refAware` substitutes `getRequestedUserRef()` for the `--user
     //     <ref>` that `index.ts` strips from argv before commander runs, and
     //     turns ref-misses into typed `UserNotFoundError`. Used by every
-    //     cli-core registrar that needs the global `--user` flag (logout +
-    //     token view).
+    //     cli-core registrar that needs the global `--user` flag (logout,
+    //     status and token view). Status needs it because it refreshes an
+    //     expiring token before anything else: with the raw store it would
+    //     refresh the default account, not the one `--user` names.
     const store = createTodoistTokenStore()
     const refAware = withUserRefAware(store)
 
     attachTodoistLoginCommand(auth)
     attachTodoistLogoutCommand(auth, refAware)
-    attachTodoistStatusCommand(auth, store)
+    attachTodoistStatusCommand(auth, refAware)
 
     // `token` is a hybrid: positional `[token]` saves, and the `view`
     // subcommand prints. Commander matches the subcommand name before the

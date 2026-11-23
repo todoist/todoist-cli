@@ -338,6 +338,60 @@ describe('auth command', () => {
             expect(consoleSpy).toHaveBeenCalledWith('  Mode:  read-write')
         })
 
+        it('refreshes only the --user account, never an expiring default', async () => {
+            const configHome = await mkdtemp(join(tmpdir(), 'td-auth-status-'))
+            await mkdir(join(configHome, 'todoist-cli'))
+            vi.stubEnv('XDG_CONFIG_HOME', configHome)
+            useStore({
+                entries: [
+                    {
+                        account: ellieSattler as TodoistAccount,
+                        isDefault: true,
+                        bundle: {
+                            accessToken: 'ellie-old-access',
+                            refreshToken: 'ellie-revoked-refresh',
+                            accessTokenExpiresAt: Date.now() + 30_000,
+                        },
+                    },
+                    {
+                        account: alanGrant as TodoistAccount,
+                        isDefault: false,
+                        token: 'alan-token',
+                    },
+                ],
+            })
+            fetchTodoistMock.mockResolvedValue(
+                new Response(JSON.stringify({ error: 'invalid_grant' }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' },
+                }),
+            )
+            const alan = { id: alanGrant.id, email: alanGrant.email, fullName: 'Alan Grant' }
+            mockGetApi.mockResolvedValue(
+                createMockApi({ getUser: vi.fn().mockResolvedValue(alan) }),
+            )
+            mockGetAuthMetadata.mockResolvedValue({
+                authMode: 'read-write',
+                source: 'secure-store',
+            })
+
+            const program = createProgram()
+            const originalArgv = process.argv
+            process.argv = ['node', 'td', '--user', alanGrant.email, 'auth', 'status']
+            resetGlobalArgs()
+            try {
+                await program.parseAsync(['node', 'td', 'auth', 'status'])
+            } finally {
+                process.argv = originalArgv
+                resetGlobalArgs()
+                vi.unstubAllEnvs()
+                await rm(configHome, { recursive: true, force: true })
+            }
+
+            expect(fetchTodoistMock).not.toHaveBeenCalled()
+            expect(consoleSpy).toHaveBeenCalledWith(`  Email: ${alanGrant.email}`)
+        })
+
         it('marks the active user as default when matching', async () => {
             useEmptyStore()
             const program = createProgram()
