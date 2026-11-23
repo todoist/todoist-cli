@@ -1,10 +1,8 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkCommand, checkoutToGuard, type PushVerdict } from './push-check.ts'
-import { writeVerified } from './state.ts'
-import { createTempRepo, type TempRepo } from './test-repo.ts'
-import { codeFingerprint, snapshot } from './tree.ts'
+import { checkCommand, type PushVerdict } from './push-check.ts'
+import { createTempRepo, markVerified as markDirVerified, type TempRepo } from './test-repo.ts'
 
 let repo: TempRepo
 
@@ -18,19 +16,15 @@ function denial(command: string, cwd?: string): string | undefined {
     return verdict.decision === 'deny' ? verdict.reason : undefined
 }
 
-function markVerified(): void {
-    writeVerified(repo.dir, {
-        fingerprint: codeFingerprint(snapshot(repo.dir)),
-        head: 'x',
-        at: 'now',
-    })
-}
+const markVerified = () => markDirVerified(repo.dir)
+const commitOnBranch = (branch: string, path: string, content?: string) =>
+    repo.commitOnBranch(branch, path, content)
 
-function commitOnBranch(branch: string, path: string, content = 'export const x = 1\n'): void {
-    repo.git(['switch', '--quiet', '-c', branch])
-    repo.write(path, content)
-    repo.git(['add', path])
-    repo.git(['commit', '--quiet', '-m', `add ${path}`])
+/** A linked worktree of the test repo on a new branch, beside it. */
+function addWorktree(name: string): string {
+    const tree = join(dirname(repo.dir), `${repo.dir.split('/').pop()}-${name}`)
+    repo.git(['worktree', 'add', '--quiet', '-b', name, tree])
+    return tree
 }
 
 const config = (...args: string[]) => repo.git(['config', ...args])
@@ -54,6 +48,16 @@ afterEach(() => {
 })
 
 describe('pushes it checks', () => {
+    it('stops a branch that deletes a doc, since the agent docs may name it', () => {
+        repo.git(['switch', '--quiet', '-c', 'no-readme'])
+        repo.git(['rm', '--quiet', 'README.md'])
+        repo.git(['commit', '--quiet', '-m', 'remove the readme'])
+        expect(denial('git push')).toContain('npm run verify')
+        // The same, committed in the command that pushes
+        repo.git(['reset', '--quiet', '--hard', 'main'])
+        rmSync(join(repo.dir, 'README.md'))
+        expect(denial('git commit -am "remove it" && git push')).toContain('npm run verify')
+    })
     it('stops a push of code verify has not passed, and allows it once it has', () => {
         commitOnBranch('feature', 'src/b.ts')
         const reason = denial('git push -u origin HEAD')
@@ -181,6 +185,67 @@ describe('pushes it checks', () => {
     })
 })
 
+describe('pushes it stops before reading them', () => {
+    it('stops a push that follows a branch switch, rebase or pull in the same command', () => {
+        commitOnBranch('feature', 'src/b.ts')
+        markVerified()
+        repo.git(['switch', '--quiet', '-c', 'other', 'main'])
+        repo.write('src/other.ts', 'export const o = 1\n')
+        repo.git(['add', '.'])
+        repo.git(['commit', '--quiet', '-m', 'other'])
+        repo.git(['switch', '--quiet', 'feature'])
+        for (const command of [
+            'git switch other && git push',
+            'git checkout other && git push origin HEAD',
+            'git pull --rebase && git push',
+            'git rebase origin/main && git push --force-with-lease origin feature',
+            'git reset --hard other && git push',
+            'gh pr checkout 12 && git push',
+        ]) {
+            expect(denial(command), command).toContain('Run the push as a command of its own.')
+        }
+        // These keep what's checked out
+        for (const command of [
+            'git checkout -- src/b.ts && git push',
+            'git reset && git push',
+            'git switch -c copy && git push -u origin copy',
+            'git checkout -b copy2 && git push -u origin copy2',
+            'git branch copy3 && git push origin copy3',
+        ]) {
+            expect(check(command), command).toEqual({ decision: 'allow', notes: [] })
+        }
+    })
+
+    it('stops a push of a branch named by a variable, or one that does not exist', () => {
+        commitOnBranch('feature', 'src/b.ts')
+        markVerified()
+        for (const command of [
+            'git push origin "$BRANCH"',
+            'for b in feature other; do git push -u origin $b; done',
+            'git push origin nowhere',
+            'git switch -c new origin/main && git push -u origin new',
+        ]) {
+            expect(denial(command), command).toMatch(/can't tell what it (will )?send/)
+        }
+    })
+
+    it('reads a push run through eval, a shell, sudo or xargs', () => {
+        commitOnBranch('feature', 'src/b.ts')
+        for (const command of [
+            'eval "git push origin feature"',
+            "sh -c 'git push origin feature'",
+            'bash -lc "cd src && git push"',
+            'sudo -u me git push',
+            "env -S 'git push origin feature'",
+        ]) {
+            expect(denial(command), command).toContain('npm run verify')
+        }
+        expect(denial('echo feature | xargs git push origin')).toContain('what `xargs` adds')
+        markVerified()
+        expect(check('eval "git push origin feature"').decision).toBe('allow')
+    })
+})
+
 describe('pushes that need no verify', () => {
     it('allows a branch that changes only docs or files only CI reads', () => {
         commitOnBranch('docs-only', 'docs/notes.md', '# notes\n')
@@ -190,17 +255,6 @@ describe('pushes that need no verify', () => {
         repo.git(['commit', '--quiet', '-m', 'docs and renovate'])
         expect(check('git push origin docs-only')).toEqual({ decision: 'allow', notes: [] })
         expect(check('gh pr create --fill').decision).toBe('allow')
-    })
-
-    it('stops a branch that deletes a doc, since the agent docs may name it', () => {
-        repo.git(['switch', '--quiet', '-c', 'no-readme'])
-        repo.git(['rm', '--quiet', 'README.md'])
-        repo.git(['commit', '--quiet', '-m', 'remove the readme'])
-        expect(denial('git push')).toContain('npm run verify')
-        // The same, committed in the command that pushes
-        repo.git(['reset', '--quiet', '--hard', 'main'])
-        rmSync(join(repo.dir, 'README.md'))
-        expect(denial('git commit -am "remove it" && git push')).toContain('npm run verify')
     })
 
     it('allows a branch whose code is what main already has', () => {
@@ -246,11 +300,14 @@ describe('pushes it leaves alone, and says so', () => {
         expect(made.notes).toEqual([expect.stringMatching(/can't find the checkout of .*newdir/)])
     })
 
-    it("notes a pull request for a branch it can't find", () => {
+    it("notes a pull request for a branch it can't find, in full words", () => {
         expect(check('gh pr create --head nowhere')).toEqual({
             decision: 'allow',
             notes: ["can't find nowhere, so the pull request isn't checked"],
         })
+        expect(check('cd "$REPO" && gh pr create --fill').notes).toEqual([
+            "can't tell which folder a pull request runs in, so it isn't checked",
+        ])
     })
 
     it('ignores commands that push nothing', () => {
@@ -261,34 +318,33 @@ describe('pushes it leaves alone, and says so', () => {
     })
 })
 
-describe('checkoutToGuard', () => {
-    function addWorktree(name: string): string {
-        const tree = join(dirname(repo.dir), `${repo.dir.split('/').pop()}-${name}`)
-        repo.git(['worktree', 'add', '--quiet', '-b', name, tree])
-        return tree
-    }
-
-    it('guards another worktree of this repository the agent works in, when it has the guard', () => {
+describe('worktrees', () => {
+    it('checks a push from another worktree of this repository that has the guard', () => {
         const tree = addWorktree('linked')
-        try {
-            expect(checkoutToGuard(repo.dir, join(tree))).toBe(repo.dir)
-            mkdirSync(join(tree, '.agents/scripts'), { recursive: true })
-            writeFileSync(join(tree, '.agents/scripts/guard.ts'), '')
-            expect(checkoutToGuard(repo.dir, tree)).toBe(tree)
-        } finally {
-            repo.git(['worktree', 'remove', '--force', tree])
-        }
-    })
+        writeFileSync(join(tree, 'src/w.ts'), 'export const w = 1\n')
+        repo.git(['-C', tree, 'add', '.'])
+        repo.git(['-C', tree, 'commit', '--quiet', '-m', 'w'])
+        // An older branch has no guard, and is left alone
+        expect(check(`git -C '${tree}' push origin HEAD`)).toEqual({ decision: 'allow', notes: [] })
 
-    it('never guards another repository, or a folder outside any', () => {
-        const other = createTempRepo()
-        try {
-            other.write('.agents/scripts/guard.ts', '')
-            expect(checkoutToGuard(repo.dir, other.dir)).toBe(repo.dir)
-            expect(checkoutToGuard(repo.dir, dirname(repo.dir))).toBe(repo.dir)
-            expect(checkoutToGuard(repo.dir, undefined)).toBe(repo.dir)
-        } finally {
-            other.cleanup()
+        repo.write('.agents/scripts/guard.ts', '')
+        repo.git(['add', '.'])
+        repo.git(['commit', '--quiet', '-m', 'add the guard'])
+        repo.git(['-C', tree, 'merge', '--quiet', '--no-edit', 'main'])
+        for (const command of [
+            `git -C '${tree}' push origin HEAD`,
+            `git -C'${tree}' push origin HEAD`,
+            `cd '${tree}' && git push`,
+        ]) {
+            expect(denial(command), command).toContain('npm run verify')
         }
+        expect(denial('git push', tree)).toContain('npm run verify')
+
+        // Its own verify record counts, not this checkout's
+        markVerified()
+        expect(denial(`git -C '${tree}' push origin HEAD`)).toContain('npm run verify')
+        markDirVerified(tree)
+        expect(check(`git -C '${tree}' push origin HEAD`).decision).toBe('allow')
+        repo.git(['worktree', 'remove', '--force', tree])
     })
 })

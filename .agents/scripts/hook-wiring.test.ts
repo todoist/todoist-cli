@@ -2,9 +2,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { writeVerified } from './lib/state.ts'
-import { createTempRepo, REPO_ROOT, type TempRepo } from './lib/test-repo.ts'
-import { codeFingerprint, snapshot } from './lib/tree.ts'
+import { createTempRepo, markVerified, REPO_ROOT, type TempRepo } from './lib/test-repo.ts'
 
 // Runs the exact hook commands from each agent's config, the way the agent would, in a
 // throwaway repo with a copy of .agents/scripts.
@@ -90,12 +88,9 @@ describe.each(AGENTS)('$name', ({ config, env }) => {
         expect(pushed.status).toBe(0)
         expect(decision(pushed.stdout)).toBe('deny')
         expect(decision(run(bash('gh pr create --fill')).stdout)).toBe('deny')
+        expect(decision(run(bash('gh pr\tcreate --fill')).stdout)).toBe('deny')
 
-        writeVerified(repo.dir, {
-            fingerprint: codeFingerprint(snapshot(repo.dir)),
-            head: 'x',
-            at: 'now',
-        })
+        markVerified(repo.dir)
         expect(run(bash('git push -u origin HEAD'))).toEqual({ status: 0, stdout: '', stderr: '' })
     })
 
@@ -115,6 +110,14 @@ describe.each(AGENTS)('$name', ({ config, env }) => {
                 stdout: '',
                 stderr: '',
             })
+            // Only the command counts, not a folder name elsewhere in the payload
+            const inPushFolder = JSON.stringify({
+                cwd: '/work/fix-push',
+                transcript_path: '/home/me/.claude/projects/-work-fix-push/session.jsonl',
+                tool_name: 'Bash',
+                tool_input: { command: 'ls' },
+            })
+            expect(run(inPushFolder, { path })).toEqual({ status: 0, stdout: '', stderr: '' })
             expect(existsSync(calls)).toBe(false)
         } finally {
             rmSync(bin, { recursive: true, force: true })

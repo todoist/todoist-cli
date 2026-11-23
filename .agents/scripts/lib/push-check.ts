@@ -1,11 +1,12 @@
 // The push check. Before an agent runs a shell command, it stops one that pushes code from this
-// checkout that `npm run verify` hasn't passed, or opens a pull request for it. A push sends
-// commits, not the working tree, so what's pushed has to be exactly a tree verify passed. Changes
-// that verify records nothing for (docs, files only CI reads) need no verify.
+// checkout, or another worktree of it, that `npm run verify` hasn't passed, or opens a pull request
+// for it. A push sends commits, not the working tree, so what's pushed has to be exactly a tree
+// verify passed. Changes that verify records nothing for (docs, files only CI reads) need no
+// verify.
 
 import { existsSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { branchBase, defaultBranchRef, findRepoRoot, git } from './git.ts'
+import { branchBase, defaultBranchRef, findRepoRoot, git, resolveCommit } from './git.ts'
 import { findTargets } from './push-targets.ts'
 import { readVerified } from './state.ts'
 import {
@@ -22,29 +23,39 @@ export type PushVerdict =
     | { decision: 'allow'; notes: string[] }
     | { decision: 'deny'; reason: string; notes: string[] }
 
-type Context = {
+/** One checkout the command pushes from, with what the command does there before it pushes. */
+type Checkout = {
     root: string
     notes: string[]
     head: string | undefined
     verified: string | undefined
-    defaultRef: string | undefined
-    /** The working tree's fingerprint, read once per command however many sources it pushes. */
+    /** Read only when needed, since most checks never get that far. */
+    defaultRef: () => string | undefined
+    /** The working tree's fingerprint, read once however many sources the command pushes. */
     tree: () => string
+    committedFirst: boolean
+    movedFirst: boolean
+    /** Branches the command makes from what's checked out before it pushes them. */
+    created: Set<string>
 }
 
 /**
- * What one push source sends: `ok`, `unclear` (every branch, or a wildcard), `unverified`, `dirty`
- * (unverified, and the working tree holds more than the pushed commit) or `other` (unverified, and
- * not what's checked out).
+ * What one push source sends: `ok`; `every` (every branch, a wildcard, or what git's settings or
+ * `xargs` pick); `unknown` (a branch named by a variable, or one that doesn't exist); `moved` (what's
+ * checked out changes first); `unverified`; `dirty` (unverified, and the working tree holds more than
+ * the pushed commit); or `other` (unverified, and not what's checked out).
  */
-type SourceResult = 'ok' | 'unclear' | 'unverified' | 'dirty' | 'other'
+type SourceResult = 'ok' | 'every' | 'unknown' | 'moved' | 'unverified' | 'dirty' | 'other'
 
 export function checkCommand({
     root,
     command,
     cwd,
 }: {
-    /** The checkout to guard. Pushes from any other folder are that folder's business. */
+    /**
+     * The checkout the guard lives in. It also guards the other worktrees of its repository that
+     * have the guard; pushes from anywhere else are that folder's business.
+     */
     root: string
     command: string
     /** The folder the command starts in. */
@@ -52,77 +63,92 @@ export function checkCommand({
 }): PushVerdict {
     const notes: string[] = []
     const targets = findTargets(command, cwd)
-    if (!targets.some((target) => target.kind !== 'commit')) return { decision: 'allow', notes }
+    if (!targets.some((target) => target.kind === 'push' || target.kind === 'pr')) {
+        return { decision: 'allow', notes }
+    }
 
-    const realRoot = realpathSync(root)
+    const guarded = guardedCheckouts(root)
+    const checkouts = new Map<string, Checkout>()
+    const found = new Set<SourceResult>()
+    let onlyPullRequests = true
+    for (const target of targets) {
+        const pushes = target.kind === 'push' || target.kind === 'pr'
+        const what = target.kind === 'pr' ? 'pull request' : 'push'
+        if (target.dir === null) {
+            if (pushes) notes.push(`can't tell which folder a ${what} runs in, so it isn't checked`)
+            continue
+        }
+        const path = checkoutOf(target.dir)
+        // A folder that doesn't exist yet, such as one the same command makes.
+        if (path === undefined) {
+            if (pushes) {
+                notes.push(
+                    `can't find the checkout of ${target.dir}, so a ${what} there isn't checked`,
+                )
+            }
+            continue
+        }
+        if (!guarded(path)) continue
+        let checkout = checkouts.get(path)
+        if (checkout === undefined) {
+            checkout = openCheckout(path, notes)
+            checkouts.set(path, checkout)
+        }
+        if (target.kind === 'commit') checkout.committedFirst = true
+        else if (target.kind === 'move') checkout.movedFirst = true
+        else if (target.kind === 'create') {
+            for (const name of target.sources) checkout.created.add(name)
+        } else {
+            // With no refspec, git's push settings can send other branches than HEAD.
+            const sources =
+                target.implicit && configuredPush(path, target.remote ?? null)
+                    ? ['*']
+                    : target.sources
+            for (const source of sources) {
+                const result = checkSource(checkout, source, target.kind)
+                if (result === 'ok') continue
+                if (target.kind === 'push') onlyPullRequests = false
+                found.add(result)
+            }
+        }
+    }
+    if (found.size === 0) return { decision: 'allow', notes }
+    return { decision: 'deny', reason: denyReason(found, onlyPullRequests), notes }
+}
+
+/**
+ * Which checkouts to guard: the one the guard lives in, and the other worktrees of its repository
+ * that have the guard (a worktree on an older branch doesn't), such as one Claude Code entered
+ * mid-session. Never another repository.
+ */
+function guardedCheckouts(root: string): (path: string) => boolean {
+    const own = realPath(root)
+    let shared: string | undefined
+    return (path) => {
+        if (path === own) return true
+        shared ??= commonDir(root)
+        return (
+            shared !== undefined &&
+            commonDir(path) === shared &&
+            existsSync(join(path, '.agents/scripts/guard.ts'))
+        )
+    }
+}
+
+function openCheckout(root: string, notes: string[]): Checkout {
     let tree: string | undefined
-    const context: Context = {
+    let defaultRef: { ref: string | undefined } | undefined
+    return {
         root,
         notes,
         head: resolveCommit(root, 'HEAD'),
         verified: readVerified(root)?.fingerprint,
-        defaultRef: defaultBranchRef(root),
+        defaultRef: () => (defaultRef ??= { ref: defaultBranchRef(root) }).ref,
         tree: () => (tree ??= codeFingerprint(snapshot(root))),
+        committedFirst: false,
+        movedFirst: false,
+        created: new Set(),
     }
-    let committedFirst = false
-    let unclear = false
-    let unverified = false
-    let dirty = false
-    let otherBranch = false
-    let onlyPullRequests = true
-    for (const target of targets) {
-        if (target.dir === null) {
-            if (target.kind !== 'commit') {
-                notes.push(`can't tell which folder a ${target.kind} runs in, so it isn't checked`)
-            }
-            continue
-        }
-        const checkout = checkoutOf(target.dir)
-        // A folder that doesn't exist yet, such as one the same command makes.
-        if (checkout === undefined && target.kind !== 'commit') {
-            notes.push(
-                `can't find the checkout of ${target.dir}, so a ${target.kind} there isn't checked`,
-            )
-        }
-        if (checkout !== realRoot) continue
-        if (target.kind === 'commit') {
-            committedFirst = true
-            continue
-        }
-        // With no refspec, git's push settings can send other branches than HEAD.
-        const sources =
-            target.implicit && configuredPush(root, target.remote ?? null) ? ['*'] : target.sources
-        for (const source of sources) {
-            const result = checkSource(context, source, target.kind, committedFirst)
-            if (result === 'ok') continue
-            if (target.kind === 'push') onlyPullRequests = false
-            if (result === 'unclear') unclear = true
-            else {
-                unverified = true
-                if (result === 'dirty') dirty = true
-                if (result === 'other') otherBranch = true
-            }
-        }
-    }
-    if (!unclear && !unverified) return { decision: 'allow', notes }
-    return {
-        decision: 'deny',
-        reason: denyReason({ unclear, unverified, dirty, otherBranch, onlyPullRequests }),
-        notes,
-    }
-}
-
-/**
- * The checkout to guard: the one the agent works in, when it's another worktree of this repository
- * with the push check, such as one Claude Code entered mid-session; otherwise `root`. Never another
- * repository, whose code the hook must not run under this project's trust.
- */
-export function checkoutToGuard(root: string, cwd: string | undefined): string {
-    const other = cwd ? checkoutOf(cwd) : undefined
-    if (other === undefined || other === realpathSync(root)) return root
-    const shared = commonDir(other)
-    if (shared === undefined || shared !== commonDir(root)) return root
-    return existsSync(join(other, '.agents/scripts/guard.ts')) ? other : root
 }
 
 /** The real path of the checkout a folder is in, or undefined when it isn't in one. */
@@ -175,38 +201,32 @@ function soleRemote(root: string): string | undefined {
     return remotes.length === 1 ? remotes[0] : undefined
 }
 
-function resolveCommit(root: string, ref: string): string | undefined {
-    const commit = git(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
-    return commit.ok ? commit.stdout.trim() || undefined : undefined
-}
+function checkSource(checkout: Checkout, source: string, kind: 'push' | 'pr'): SourceResult {
+    if (source.includes('*')) return 'every'
+    // HEAD, or the branch a rebase or pull moves, holds something else by the time the push runs.
+    if (checkout.movedFirst) return 'moved'
+    // A shell variable or command substitution, whose value the command doesn't show
+    if (source.includes('$')) return 'unknown'
 
-function checkSource(
-    context: Context,
-    source: string,
-    kind: 'push' | 'pr' | 'commit',
-    committedFirst: boolean,
-): SourceResult {
-    if (source.includes('*')) return 'unclear'
-
-    const { root, notes, head } = context
+    const { root, notes, head } = checkout
     let commit = resolveCommit(root, source)
     if (commit === undefined) {
-        if (kind === 'pr') {
+        if (checkout.created.has(source)) commit = head
+        else if (kind === 'pr') {
+            // It may exist only on the remote, which no local check can vouch for either way.
             notes.push(`can't find ${source}, so the pull request isn't checked`)
             return 'ok'
-        }
-        // A source that isn't a commit yet, such as a branch the same command makes, is HEAD's.
-        commit = head
+        } else return 'unknown'
         if (commit === undefined) return 'ok'
     }
     // The same command commits first, so what it pushes is the working tree.
-    const fromTree = committedFirst && commit === head
-    const fingerprint = fromTree ? context.tree() : codeFingerprint(snapshotCommit(root, commit))
-    if (fingerprint === context.verified) return 'ok'
-    if (onlyUncheckedChanges(context, fromTree ? undefined : commit)) return 'ok'
+    const fromTree = checkout.committedFirst && commit === head
+    const fingerprint = fromTree ? checkout.tree() : codeFingerprint(snapshotCommit(root, commit))
+    if (fingerprint === checkout.verified) return 'ok'
+    if (onlyUncheckedChanges(checkout, fromTree ? undefined : commit)) return 'ok'
 
     if (!fromTree && commit !== head) return 'other'
-    if (!fromTree && context.tree() !== fingerprint) return 'dirty'
+    if (!fromTree && checkout.tree() !== fingerprint) return 'dirty'
     return 'unverified'
 }
 
@@ -216,10 +236,10 @@ function checkSource(
  * checks the whole tree, and records a pass, when there is no default branch to compare with, so
  * then nothing is exempt.
  */
-function onlyUncheckedChanges(context: Context, commit: string | undefined): boolean {
-    const { root, defaultRef } = context
+function onlyUncheckedChanges(checkout: Checkout, commit: string | undefined): boolean {
+    const { root } = checkout
     // From the pushed commit: the branch checked out may have left main somewhere else.
-    const base = branchBase(root, defaultRef, commit ?? 'HEAD')
+    const base = branchBase(root, checkout.defaultRef(), commit ?? 'HEAD')
     if (base === undefined) return false
     if (commit === undefined)
         return !changedSince(root, base).some((path) => needsChecks(root, path))
@@ -228,52 +248,55 @@ function onlyUncheckedChanges(context: Context, commit: string | undefined): boo
     )
 }
 
-function denyReason({
-    unclear,
-    unverified,
-    dirty,
-    otherBranch,
-    onlyPullRequests,
-}: {
-    unclear: boolean
-    unverified: boolean
-    dirty: boolean
-    otherBranch: boolean
-    onlyPullRequests: boolean
-}): string {
-    const lines: string[] = []
-    if (unclear) {
-        lines.push(
-            "This pushes every branch at once, the ones a wildcard matches, or what git's push " +
-                'settings pick (`remote.<name>.push`, or `push.default=matching`), so the push ' +
-                "check can't tell what it sends. Name each branch instead: `git push origin <branch>`.",
+function denyReason(found: Set<SourceResult>, onlyPullRequests: boolean): string {
+    const paragraphs: string[] = []
+    if (found.has('every')) {
+        paragraphs.push(
+            "This pushes every branch at once, the ones a wildcard matches, what git's push " +
+                'settings pick (`remote.<name>.push`, or `push.default=matching`), or what `xargs` ' +
+                "adds, so the push check can't tell what it sends. Name each branch instead: `git " +
+                'push origin <branch>`.',
         )
     }
-    if (unverified) {
-        if (lines.length > 0) lines.push('')
-        lines.push(
+    if (found.has('unknown')) {
+        paragraphs.push(
+            'This pushes a branch named by a shell variable, or one that does not exist, so the ' +
+                "push check can't tell what it sends. Name each branch instead: `git push origin " +
+                '<branch>`.',
+        )
+    }
+    if (found.has('moved')) {
+        paragraphs.push(
+            'This changes what is checked out (`git switch`, `git checkout`, `git rebase`, `git ' +
+                "pull` and the like) before it pushes, so the push check can't tell what it will " +
+                'send. Run the push as a command of its own.',
+        )
+    }
+    if (found.has('unverified') || found.has('dirty') || found.has('other')) {
+        const lines = [
             onlyPullRequests
                 ? "This opens a pull request for code that `npm run verify` hasn't passed."
                 : "This pushes code that `npm run verify` hasn't passed.",
             '',
-            otherBranch
+            found.has('other')
                 ? 'Verify checks the working tree and keeps one record per checkout, so it can only ' +
-                      'vouch for what you have checked out. Check out each branch, run `npm run ' +
-                      'verify` there, and push it on its own.'
+                  'vouch for what you have checked out. Check out each branch, run `npm run ' +
+                  'verify` there, and push it on its own.'
                 : 'Run `npm run verify` and fix what fails, then run this command again.',
-        )
-        if (dirty) {
+        ]
+        if (found.has('dirty')) {
             lines.push(
                 "Verify checks the working tree, which holds changes your last commit doesn't. " +
                     'Commit what belongs in it, and stash the rest with `git stash -u` before you ' +
                     'run verify. `git stash pop` brings them back afterwards.',
             )
         }
+        paragraphs.push(lines.join('\n'))
     }
-    lines.push(
+    return [
+        paragraphs.join('\n\n'),
         'If it has to be pushed this way anyway, ask the person you are working with to push it ' +
             'themselves.',
         'Details: docs/agents.md',
-    )
-    return lines.join('\n')
+    ].join('\n')
 }

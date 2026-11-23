@@ -2,9 +2,7 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
-import { writeVerified } from './lib/state.ts'
-import { createTempRepo, type TempRepo } from './lib/test-repo.ts'
-import { codeFingerprint, snapshot } from './lib/tree.ts'
+import { createTempRepo, markVerified, type TempRepo } from './lib/test-repo.ts'
 
 // guard.ts as the agents' hooks run it: a separate node process, the hook's JSON on stdin, in a
 // throwaway repo holding a copy of .agents/scripts. The decisions themselves are covered in
@@ -29,12 +27,7 @@ const bash = (command: string, cwd = repo.dir) => ({
     cwd,
 })
 
-function commitOnBranch(branch: string, path: string): void {
-    repo.git(['switch', '--quiet', '-c', branch])
-    repo.write(path, 'export const x = 1\n')
-    repo.git(['add', path])
-    repo.git(['commit', '--quiet', '-m', `add ${path}`])
-}
+const commitOnBranch = (branch: string, path: string) => repo.commitOnBranch(branch, path)
 
 beforeEach(() => {
     repo = createTempRepo()
@@ -63,11 +56,7 @@ it('stops an unverified push with the PreToolUse decision Claude Code and Codex 
 
 it('prints nothing for a verified push, or a command that pushes nothing', () => {
     commitOnBranch('feature', 'src/b.ts')
-    writeVerified(repo.dir, {
-        fingerprint: codeFingerprint(snapshot(repo.dir)),
-        head: 'x',
-        at: 'now',
-    })
+    markVerified(repo.dir)
     expect(guard(bash('git push')).stdout).toBe('')
     expect(guard(bash('ls')).stdout).toBe('')
     // A tool call with no shell command, such as one a wider matcher lets through

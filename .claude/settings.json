@@ -6,7 +6,7 @@
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "p=$(cat); case $p in *push* | *pr[[:space:]]*create* | *pr[[:space:]]*new*) ;; *) exit 0 ;; esac; root=\"$CLAUDE_PROJECT_DIR\"; [ -n \"$root\" ] || root=$(unset $(git rev-parse --local-env-vars 2>/dev/null); git rev-parse --show-toplevel 2>/dev/null) || exit 0; f=\"$root/.agents/scripts/guard.ts\"; [ -f \"$f\" ] || exit 0; printf '%s' \"$p\" | node \"$f\" tool-start",
+                        "command": "p=$(cat); case $p in *'\"command\"'*push* | *'\"command\"'*pr[[:space:]\\\\]*create* | *'\"command\"'*pr[[:space:]\\\\]*new*) ;; *) exit 0 ;; esac; root=\"$CLAUDE_PROJECT_DIR\"; [ -n \"$root\" ] || root=$(unset $(git rev-parse --local-env-vars 2>/dev/null); git rev-parse --show-toplevel 2>/dev/null) || exit 0; f=\"$root/.agents/scripts/guard.ts\"; [ -f \"$f\" ] || exit 0; printf '%s' \"$p\" | node \"$f\" tool-start",
                         "timeout": 30
                     }
                 ]

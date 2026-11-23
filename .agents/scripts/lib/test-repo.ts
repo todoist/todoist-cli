@@ -6,6 +6,8 @@ import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } f
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { CHECKOUT_ROOT, cleanGitEnv } from './git.ts'
+import { writeVerified } from './state.ts'
+import { codeFingerprint, snapshot } from './tree.ts'
 
 export const REPO_ROOT = CHECKOUT_ROOT
 
@@ -57,6 +59,8 @@ export type TempRepo = {
     copyFromCheckout: (...paths: string[]) => void
     /** Adds a bare `origin` outside the repo, pushes `main` to it, and returns its path. */
     addOrigin: () => string
+    /** Makes and switches to `branch`, then commits `path` holding `content` there. */
+    commitOnBranch: (branch: string, path: string, content?: string) => void
     cleanup: () => void
 }
 
@@ -99,6 +103,12 @@ export function createTempRepo(): TempRepo {
             }
             return origin
         },
+        commitOnBranch(branch, path, content = 'export const x = 1\n') {
+            repo.git(['switch', '--quiet', '-c', branch])
+            repo.write(path, content)
+            repo.git(['add', path])
+            repo.git(['commit', '--quiet', '-m', `add ${path}`])
+        },
         cleanup() {
             for (const path of [dir, ...extraDirs]) rmSync(path, { recursive: true, force: true })
         },
@@ -119,4 +129,9 @@ export function installLefthook(repo: TempRepo): void {
     const lefthook = join(REPO_ROOT, 'node_modules/lefthook/bin/index.js')
     const result = repo.run(process.execPath, [lefthook, 'install', '--reset-hooks-path'])
     if (result.status !== 0) throw new Error(`lefthook install failed: ${result.stderr}`)
+}
+
+/** Records that `npm run verify` passed on the working tree as it is now, as a pass would. */
+export function markVerified(dir: string): void {
+    writeVerified(dir, { fingerprint: codeFingerprint(snapshot(dir)), head: 'x', at: 'now' })
 }

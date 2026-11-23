@@ -42,9 +42,13 @@ export function defaultBranchRef(root: string): string | undefined {
         'refs/remotes/origin/main',
         'refs/heads/main',
     ]
-    return candidates.find(
-        (ref) => ref && git(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).ok,
-    )
+    return candidates.find((ref) => ref && resolveCommit(root, ref) !== undefined)
+}
+
+/** The commit `ref` names, or undefined when it names none. */
+export function resolveCommit(root: string, ref: string): string | undefined {
+    const commit = git(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`])
+    return commit.ok ? commit.stdout.trim() || undefined : undefined
 }
 
 /**
