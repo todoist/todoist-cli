@@ -1,8 +1,7 @@
 import { type AuthProvider, createPkceProvider } from '@todoist/cli-core/auth'
 import { createApiForToken } from './api/core.js'
 import { type TodoistAccount, toTodoistAccount } from './auth-store.js'
-import { type AuthFlag } from './config.js'
-import { describeGrantedScope, extractAdditionalScopes, resolveAuthScope } from './oauth-scopes.js'
+import { describeScope, extractAdditionalScopes, resolveAuthScope } from './oauth-scopes.js'
 import { fetchTodoist } from './usage-tracking.js'
 
 /**
@@ -62,7 +61,7 @@ export function createTodoistAuthProvider(): AuthProvider<TodoistAccount> {
             // Record what Todoist granted when it says; it can be less than
             // was asked for. Otherwise fall back to the request.
             const { authMode, authScope, authFlags } = scope
-                ? describeGrantedScope(scope)
+                ? describeScope(scope)
                 : describeRequestedScope(handshake)
 
             return toTodoistAccount({
@@ -79,17 +78,12 @@ export function createTodoistAuthProvider(): AuthProvider<TodoistAccount> {
 }
 
 /** The scope a login asked for, from the `--read-only` / `--additional-scopes` flags. */
-function describeRequestedScope(handshake: Record<string, unknown>): {
-    authMode: 'read-only' | 'read-write'
-    authScope: string
-    authFlags: AuthFlag[]
-} {
+function describeRequestedScope(
+    handshake: Record<string, unknown>,
+): ReturnType<typeof describeScope> {
     const flags = (handshake.flags as Record<string, unknown> | undefined) ?? {}
     const readOnly = Boolean(handshake.readOnly)
-    const additionalScopes = extractAdditionalScopes(flags)
-    return {
-        authMode: readOnly ? 'read-only' : 'read-write',
-        authScope: resolveAuthScope({ readOnly, additionalScopes }),
-        authFlags: [...(readOnly ? (['read-only'] as const) : []), ...additionalScopes],
-    }
+    return describeScope(
+        resolveAuthScope({ readOnly, additionalScopes: extractAdditionalScopes(flags) }),
+    )
 }

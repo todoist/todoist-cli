@@ -499,6 +499,8 @@ describe('lib/auth', () => {
                 api_token: 'new-access',
                 refresh_token: 'new-refresh',
                 has_refresh_token: true,
+                // Kept for the next refresh, which has to go to the same client.
+                oauth_client_id: 'https://example.com/issuing-client',
             })
             const expiresAt = persistedUser().access_token_expires_at as number
             expect(expiresAt).toBeGreaterThanOrEqual(before + 3_600_000)
