@@ -1,5 +1,5 @@
 import { readStdin } from '@todoist/cli-core'
-import type { ColorKey, ProjectViewStyle } from '@todoist/sdk'
+import type { ColorKey, ProjectIcon, ProjectViewStyle } from '@todoist/sdk'
 import chalk from 'chalk'
 import { getApi } from '../../lib/api/core.js'
 import { CliError } from '../../lib/errors.js'
@@ -11,6 +11,7 @@ import { resolvePersonalParent } from './helpers.js'
 export interface CreateOptions {
     name: string
     color?: ColorKey
+    icon?: ProjectIcon
     favorite?: boolean
     parent?: string
     viewStyle?: string
@@ -35,6 +36,7 @@ export async function createProject(options: CreateOptions): Promise<void> {
         printDryRun('create project', {
             Name: options.name,
             Color: options.color,
+            Icon: options.icon,
             Favorite: options.favorite ? 'yes' : undefined,
             Parent: options.parent,
             'View style': options.viewStyle,
@@ -56,6 +58,7 @@ export async function createProject(options: CreateOptions): Promise<void> {
     const project = await api.addProject({
         name: options.name,
         color: options.color,
+        icon: options.icon,
         isFavorite: options.favorite,
         parentId,
         viewStyle: options.viewStyle as ProjectViewStyle,

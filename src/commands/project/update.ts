@@ -1,5 +1,10 @@
 import { readStdin } from '@todoist/cli-core'
-import { isWorkspaceProject, type ColorKey, type ProjectViewStyle } from '@todoist/sdk'
+import {
+    isWorkspaceProject,
+    type ColorKey,
+    type ProjectIcon,
+    type ProjectViewStyle,
+} from '@todoist/sdk'
 import { getApi } from '../../lib/api/core.js'
 import { moveProjectParent } from '../../lib/api/projects-sync.js'
 import { CliError } from '../../lib/errors.js'
@@ -12,6 +17,7 @@ import { isDescendantOf, loadPersonalProjects, resolvePersonalParent } from './h
 export interface UpdateOptions {
     name?: string
     color?: ColorKey
+    icon?: ProjectIcon | false
     favorite?: boolean
     folder?: string | false
     parent?: string | false
@@ -33,6 +39,7 @@ export async function updateProject(ref: string, options: UpdateOptions): Promis
     const args: Parameters<typeof api.updateProject>[1] = {}
     if (options.name) args.name = options.name
     if (options.color) args.color = options.color
+    if (options.icon !== undefined) args.icon = options.icon || null
     if (options.favorite === true) args.isFavorite = true
     if (options.favorite === false) args.isFavorite = false
     if (options.viewStyle) args.viewStyle = options.viewStyle as ProjectViewStyle
@@ -100,6 +107,7 @@ export async function updateProject(ref: string, options: UpdateOptions): Promis
             Project: project.name,
             Name: args.name,
             Color: args.color,
+            Icon: args.icon === null ? '(default)' : args.icon,
             Favorite: args.isFavorite !== undefined ? String(args.isFavorite) : undefined,
             Folder:
                 args.folderId === null

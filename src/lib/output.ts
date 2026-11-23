@@ -301,6 +301,7 @@ const PROJECT_ESSENTIAL_FIELDS = [
     'name',
     'description',
     'color',
+    'icon',
     'isFavorite',
     'parentId',
     'viewStyle',

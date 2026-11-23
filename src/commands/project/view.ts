@@ -190,6 +190,7 @@ export async function viewProject(
         }
 
         console.log(`Color:    ${displayProject.color}`)
+        if (displayProject.icon) console.log(`Icon:     ${displayProject.icon}`)
         console.log(`Favorite: ${displayProject.isFavorite ? 'Yes' : 'No'}`)
         console.log(`Comments: ${fullData.commentsCount}`)
         console.log(`URL:      ${projectUrl(displayProject.id)}`)
@@ -290,6 +291,7 @@ export async function viewProject(
     }
 
     console.log(`Color:    ${project.color}`)
+    if (project.icon) console.log(`Icon:     ${project.icon}`)
     console.log(`Favorite: ${project.isFavorite ? 'Yes' : 'No'}`)
     console.log(`URL:      ${projectUrl(project.id)}`)
     printChildren(children, project.id)

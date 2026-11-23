@@ -1,7 +1,9 @@
 import {
     isWorkspaceProject,
+    PROJECT_ICONS,
     PROJECT_VIEW_STYLES,
     type PersonalProject,
+    type ProjectIcon,
     type ProjectViewStyle,
     type TodoistApi,
 } from '@todoist/sdk'
@@ -11,6 +13,7 @@ import { paginate } from '../../lib/pagination.js'
 import { extractId, isIdRef, resolveProjectRef } from '../../lib/refs.js'
 
 export const VIEW_STYLE_CHOICES: ProjectViewStyle[] = [...PROJECT_VIEW_STYLES]
+export const ICON_CHOICES: ProjectIcon[] = [...PROJECT_ICONS]
 
 /**
  * Resolve a project reference for use as a parent. Rejects workspace projects

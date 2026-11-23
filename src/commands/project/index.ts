@@ -14,7 +14,7 @@ import { listCollaborators } from './collaborators.js'
 import { createProject } from './create.js'
 import { deleteProject } from './delete.js'
 import { showProjectHealth } from './health.js'
-import { VIEW_STYLE_CHOICES } from './helpers.js'
+import { ICON_CHOICES, VIEW_STYLE_CHOICES } from './helpers.js'
 import { joinProjectCmd } from './join.js'
 import { listProjects } from './list.js'
 import { moveProject } from './move.js'
@@ -110,6 +110,9 @@ Examples:
         .description('Create a project')
         .option('--name <name>', 'Project name (required)')
         .option('--color <color>', 'Project color')
+        .addOption(
+            withCaseInsensitiveChoices(new Option('--icon <icon>', 'Project icon'), ICON_CHOICES),
+        )
         .option('--favorite', 'Mark as favorite')
         .option('--parent <ref>', 'Parent project (name or id:xxx)')
         .addOption(
@@ -135,6 +138,10 @@ Examples:
         .description('Update a project')
         .option('--name <name>', 'New name')
         .option('--color <color>', 'New color')
+        .addOption(
+            withCaseInsensitiveChoices(new Option('--icon <icon>', 'New icon'), ICON_CHOICES),
+        )
+        .option('--no-icon', 'Restore the default icon')
         .option('--favorite', 'Mark as favorite')
         .option('--no-favorite', 'Remove from favorites')
         .option('--folder <ref>', 'Move into a folder by name or id:xxx (workspace projects only)')

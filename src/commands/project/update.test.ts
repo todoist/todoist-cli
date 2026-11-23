@@ -210,6 +210,36 @@ describe('project update', () => {
         })
     })
 
+    it('sets the project icon with --icon', async () => {
+        const program = createProgram()
+
+        mockApi.getProject.mockResolvedValue({ id: 'proj-1', name: 'Trips' })
+        mockApi.updateProject.mockResolvedValue({ id: 'proj-1', name: 'Trips' })
+
+        await program.parseAsync([
+            'node',
+            'td',
+            'project',
+            'update',
+            'id:proj-1',
+            '--icon',
+            'Airplane',
+        ])
+
+        expect(mockApi.updateProject).toHaveBeenCalledWith('proj-1', { icon: 'airplane' })
+    })
+
+    it('restores the default icon with --no-icon', async () => {
+        const program = createProgram()
+
+        mockApi.getProject.mockResolvedValue({ id: 'proj-1', name: 'Trips', icon: 'airplane' })
+        mockApi.updateProject.mockResolvedValue({ id: 'proj-1', name: 'Trips' })
+
+        await program.parseAsync(['node', 'td', 'project', 'update', 'id:proj-1', '--no-icon'])
+
+        expect(mockApi.updateProject).toHaveBeenCalledWith('proj-1', { icon: null })
+    })
+
     it('rejects --folder on personal projects', async () => {
         const program = createProgram()
 

@@ -344,6 +344,25 @@ describe('project view', () => {
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Color:'))
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Favorite:'))
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('URL:'))
+        expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining('Icon:'))
+    })
+
+    it('shows the project icon when one is set', async () => {
+        const program = createProgram()
+
+        mockApi.getProject.mockResolvedValue({
+            id: 'proj-1',
+            name: 'Ideas',
+            color: 'blue',
+            icon: 'lightbulb',
+            isFavorite: false,
+            url: 'https://todoist.com/app/project/proj-1',
+        })
+        mockApi.getTasks.mockResolvedValue({ results: [], nextCursor: null })
+
+        await program.parseAsync(['node', 'td', 'project', 'view', 'id:proj-1'])
+
+        expect(consoleSpy).toHaveBeenCalledWith('Icon:     lightbulb')
     })
 
     it('prints the raw description with --raw, bypassing the renderer', async () => {
@@ -1111,6 +1130,27 @@ describe('project create', () => {
                 color: 'blue',
                 isFavorite: true,
             }),
+        )
+    })
+
+    it('creates project with --icon', async () => {
+        const program = createProgram()
+
+        mockApi.addProject.mockResolvedValue({ id: 'proj-new', name: 'Home', icon: 'house' })
+
+        await program.parseAsync([
+            'node',
+            'td',
+            'project',
+            'create',
+            '--name',
+            'Home',
+            '--icon',
+            'house',
+        ])
+
+        expect(mockApi.addProject).toHaveBeenCalledWith(
+            expect.objectContaining({ name: 'Home', icon: 'house' }),
         )
     })
 
