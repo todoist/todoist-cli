@@ -151,14 +151,24 @@ it.each(['not json', '[1, 2]', 'null', '"git push"'])('fails open on the input %
     expect(result.json.systemMessage).toContain('hook failed, so it allowed the action')
 })
 
+function runEvent(event: string) {
+    return repo.run(process.execPath, [join(repo.dir, '.agents/scripts/guard.ts'), event], {
+        input: JSON.stringify({ session_id: 's1' }),
+    })
+}
+
 it('fails open on an unknown event', () => {
-    const result = repo.run(
-        process.execPath,
-        [join(repo.dir, '.agents/scripts/guard.ts'), 'turn-end'],
-        { input: JSON.stringify(bash('git push')) },
-    )
+    const result = runEvent('turn-middle')
     expect(result.status).toBe(0)
-    expect(JSON.parse(result.stdout).systemMessage).toContain('unknown event "turn-end"')
+    expect(JSON.parse(result.stdout).systemMessage).toContain('unknown event "turn-middle"')
+})
+
+it('says nothing to the end-of-turn events older hook configs still send', () => {
+    commitOnBranch('feature', 'src/b.ts')
+    for (const event of ['turn-start', 'turn-end']) {
+        const result = runEvent(event)
+        expect([result.status, result.stdout, result.stderr], event).toEqual([0, '', ''])
+    }
 })
 
 it('runs the check even when the agent running the tests has DISABLE_AGENT_GUARD=1', () => {

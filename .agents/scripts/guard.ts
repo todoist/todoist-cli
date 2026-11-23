@@ -30,7 +30,15 @@ function readPayload(): Record<string, unknown> {
     return payload as Record<string, unknown>
 }
 
+/**
+ * Events of the end-of-turn gate the push check replaced. Hook configs elsewhere still send them:
+ * Codex runs the main checkout's hooks in a linked worktree, and a running session keeps the
+ * hooks it started with. There is nothing to do for them.
+ */
+const RETIRED_EVENTS = new Set(['turn-start', 'turn-end'])
+
 async function main(): Promise<void> {
+    if (event !== undefined && RETIRED_EVENTS.has(event)) return
     if (event !== 'tool-start') throw new Error(`unknown event "${event}"`)
     // Imported inside the try, so a broken library file fails open like any other error.
     const { CHECKOUT_ROOT, findRepoRoot } = await import('./lib/git.ts')
