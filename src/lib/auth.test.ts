@@ -432,6 +432,11 @@ describe('lib/auth', () => {
             }))
         })
 
+        afterEach(() => {
+            // `vi.doMock` registrations outlive `vi.resetModules()`.
+            vi.doUnmock('./auth-refresh.js')
+        })
+
         function plaintextUser(overrides: Record<string, unknown> = {}) {
             return {
                 id: '111',
@@ -583,6 +588,59 @@ describe('lib/auth', () => {
                 api_token: 'new-access',
                 refresh_token: 'new-refresh',
             })
+        })
+
+        it('refreshes a keyring-backed account, whose refresh token is only in the keyring', async () => {
+            // The record carries just the flag; the refresh token sits in the
+            // `user-111/refresh` keyring slot, which cli-core reads itself.
+            setConfig({
+                config_version: 2,
+                users: [
+                    {
+                        id: '111',
+                        email: 'a@b.c',
+                        access_token_expires_at: Date.now() + 30_000,
+                        has_refresh_token: true,
+                    },
+                ],
+            })
+            entryFor(keyring, 'user-111').token = 'old-access'
+            const refreshStoredToken = vi.fn().mockResolvedValue('new-access')
+            vi.doMock('./auth-refresh.js', () => ({ refreshStoredToken }))
+
+            const { resolveActiveUser } = await import('./auth.js')
+
+            await expect(resolveActiveUser()).resolves.toMatchObject({
+                token: 'new-access',
+                source: 'secure-store',
+                canRefresh: true,
+            })
+            expect(refreshStoredToken).toHaveBeenCalledWith('111')
+        })
+
+        it('asks for a new login when Todoist rejects the refresh token', async () => {
+            setConfig({
+                config_version: 2,
+                users: [
+                    plaintextUser({
+                        refresh_token: 'revoked-refresh',
+                        access_token_expires_at: Date.now() + 30_000,
+                        has_refresh_token: true,
+                    }),
+                ],
+            })
+            fetchTodoistMock.mockResolvedValue(
+                new Response(JSON.stringify({ error: 'invalid_grant' }), {
+                    status: 400,
+                    headers: { 'Content-Type': 'application/json' },
+                }),
+            )
+
+            const { getApiToken } = await import('./auth.js')
+
+            // Even though the stored token has 30 seconds left, a refresh
+            // token Todoist rejects won't recover; say so now.
+            await expect(getApiToken()).rejects.toMatchObject({ code: 'AUTH_REFRESH_EXPIRED' })
         })
 
         it('keeps the stored token when a refresh fails to connect before it expires', async () => {

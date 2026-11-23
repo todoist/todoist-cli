@@ -157,6 +157,16 @@ export async function listStoredUsers(): Promise<StoredUser[]> {
     return getStoredUsers(await readConfig())
 }
 
+/** The token stored in plaintext in the config, when there is one. */
+function plaintextToken(user: StoredUser): string | undefined {
+    return user.api_token?.trim() || undefined
+}
+
+/** Where a stored user's token lives: plaintext in the config, or the keyring. */
+function sourceFor(user: StoredUser): 'config-file' | 'secure-store' {
+    return plaintextToken(user) ? 'config-file' : 'secure-store'
+}
+
 function hasRefreshToken(user: StoredUser): boolean {
     return user.has_refresh_token === true || Boolean(user.refresh_token?.trim())
 }
@@ -176,10 +186,7 @@ async function loadTokenForStoredUser(
             const refreshed = await refreshExpiringToken(user.id, expiresAt)
             if (refreshed) {
                 // A refresh keeps the credential where it was stored.
-                return {
-                    token: refreshed,
-                    source: user.api_token?.trim() ? 'config-file' : 'secure-store',
-                }
+                return { token: refreshed, source: sourceFor(user) }
             }
         } else if (expiresAt <= Date.now()) {
             throw new CliError(
@@ -215,8 +222,9 @@ async function refreshExpiringToken(
 async function loadStoredToken(
     user: StoredUser,
 ): Promise<{ token: string; source: 'secure-store' | 'config-file' }> {
-    if (user.api_token?.trim()) {
-        return { token: user.api_token.trim(), source: 'config-file' }
+    const plaintext = plaintextToken(user)
+    if (plaintext) {
+        return { token: plaintext, source: 'config-file' }
     }
     // Let `SecureStoreUnavailableError` propagate — a stored v2 user with the
     // keyring offline is not the same situation as no credentials at all.
