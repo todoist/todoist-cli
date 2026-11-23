@@ -55,11 +55,14 @@ export type TempRepo = {
     write: (path: string, content: string) => void
     /** Copies files or folders from the real checkout into the same paths in this repo. */
     copyFromCheckout: (...paths: string[]) => void
+    /** Adds a bare `origin` outside the repo, pushes `main` to it, and returns its path. */
+    addOrigin: () => string
     cleanup: () => void
 }
 
 export function createTempRepo(): TempRepo {
     const dir = mkdtempSync(join(tmpdir(), 'agent tools-'))
+    const extraDirs: string[] = []
 
     const run: TempRepo['run'] = (command, args, options = {}) =>
         spawnSync(command, args, {
@@ -83,8 +86,21 @@ export function createTempRepo(): TempRepo {
                 cpSync(join(REPO_ROOT, path), join(dir, path), { recursive: true })
             }
         },
+        addOrigin() {
+            const origin = mkdtempSync(join(tmpdir(), 'agent tools origin-'))
+            extraDirs.push(origin)
+            for (const args of [
+                ['init', '--quiet', '--bare', '--initial-branch', 'main', origin],
+                ['remote', 'add', 'origin', origin],
+                ['push', '--quiet', 'origin', 'main'],
+            ]) {
+                const result = repo.git(args)
+                if (result.status !== 0) throw new Error(`git ${args[0]} failed: ${result.stderr}`)
+            }
+            return origin
+        },
         cleanup() {
-            rmSync(dir, { recursive: true, force: true })
+            for (const path of [dir, ...extraDirs]) rmSync(path, { recursive: true, force: true })
         },
     }
 

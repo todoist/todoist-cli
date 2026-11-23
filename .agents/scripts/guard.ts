@@ -1,14 +1,13 @@
 // The one entry point every agent's hooks call, so the rules can't drift apart per agent.
 //
-//   node .agents/scripts/guard.ts turn-start   when the person sends a message: snapshot the tree
-//   node .agents/scripts/guard.ts turn-end     when the agent stops: may send it back once
+//   node .agents/scripts/guard.ts tool-start   before a shell command: stops a push, or a new pull
+//                                              request, of code `npm run verify` hasn't passed
 //
-// Input is the hook's JSON on stdin; Claude Code, Codex and Cursor send compatible shapes, and
-// all three read `{"decision":"block","reason":...}` from a Stop hook. The guard keeps its own
-// record of having sent the agent back, rather than trusting stop_hook_active or loop_count. It
-// guards the checkout this file lives in, not the hook's working directory. A broken guard never
-// blocks work: any error allows the action and says why. DISABLE_AGENT_GUARD=1 turns it off.
-// See docs/agents.md.
+// Input is the hook's JSON on stdin; Claude Code and Codex send the same shape, and both read
+// `hookSpecificOutput.permissionDecision: "deny"` from a PreToolUse hook. It guards the checkout
+// this file lives in, or another worktree of it the agent works in, and only pushes from that
+// checkout. A broken guard never blocks work: any error allows the action and says why.
+// DISABLE_AGENT_GUARD=1 turns it off. See docs/agents.md.
 
 import { readFileSync } from 'node:fs'
 
@@ -23,36 +22,47 @@ function reply(value: Record<string, unknown>): void {
 function readPayload(): Record<string, unknown> {
     // Run by hand in a terminal, there is no hook payload; reading would wait for EOF.
     if (process.stdin.isTTY) return {}
-    let text = ''
-    try {
-        text = readFileSync(0, 'utf8')
-    } catch {
-        return {}
+    const text = readFileSync(0, 'utf8')
+    const payload: unknown = text.trim() ? JSON.parse(text) : {}
+    if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+        throw new Error("hook input isn't a JSON object")
     }
-    return text.trim() ? (JSON.parse(text) as Record<string, unknown>) : {}
+    return payload as Record<string, unknown>
 }
 
 async function main(): Promise<void> {
-    if (event !== 'turn-start' && event !== 'turn-end') {
-        throw new Error(`unknown event "${event}"`)
-    }
+    if (event !== 'tool-start') throw new Error(`unknown event "${event}"`)
     // Imported inside the try, so a broken library file fails open like any other error.
-    const { CHECKOUT_ROOT } = await import('./lib/git.ts')
-    const { endTurn, startTurn } = await import('./lib/turn-gate.ts')
+    const { CHECKOUT_ROOT, findRepoRoot } = await import('./lib/git.ts')
+    const { checkCommand, checkoutToGuard } = await import('./lib/push-check.ts')
 
     const payload = readPayload()
-    const sessionId = String(
-        payload.session_id ?? payload.conversation_id ?? payload.thread_id ?? 'default',
-    )
-    if (event === 'turn-start') {
-        startTurn({ root: CHECKOUT_ROOT, sessionId })
+    const command = (payload.tool_input as { command?: unknown } | undefined)?.command
+    // A tool call with no shell command pushes nothing.
+    if (typeof command !== 'string') return
+    const ownRoot = findRepoRoot(CHECKOUT_ROOT)
+    if (ownRoot === undefined) {
+        reply({
+            systemMessage: 'agent-guard: no git repository found, so the push was not checked',
+        })
         return
     }
-    const verdict = endTurn({ root: CHECKOUT_ROOT, sessionId })
-    if (verdict.decision === 'block') {
-        reply({ decision: 'block', reason: verdict.reason })
-    } else if (verdict.note) {
-        reply({ systemMessage: `agent-guard: ${verdict.note}` })
+    const cwd = typeof payload.cwd === 'string' ? payload.cwd : process.cwd()
+    const root = checkoutToGuard(ownRoot, cwd)
+
+    const verdict = checkCommand({ root, command, cwd })
+    const notes = verdict.notes.map((note) => `agent-guard: ${note}`).join('\n')
+    if (verdict.decision === 'deny') {
+        reply({
+            hookSpecificOutput: {
+                hookEventName: 'PreToolUse',
+                permissionDecision: 'deny',
+                permissionDecisionReason: verdict.reason,
+            },
+            ...(notes ? { systemMessage: notes } : {}),
+        })
+    } else if (notes) {
+        reply({ systemMessage: notes })
     }
 }
 
