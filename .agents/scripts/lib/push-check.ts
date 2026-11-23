@@ -15,9 +15,9 @@ import {
     changeNeedsChecks,
     codeFingerprint,
     commitChanges,
+    commitFingerprint,
     needsChecks,
     snapshot,
-    snapshotCommit,
 } from './tree.ts'
 
 export type PushVerdict =
@@ -222,15 +222,17 @@ function checkSource(checkout: Checkout, source: string, kind: 'push' | 'pr'): S
     }
     // The same command commits first, so what it pushes is the working tree.
     const fromTree = checkout.committedFirst && commit === head
-    const fingerprint = fromTree ? checkout.tree() : codeFingerprint(snapshotCommit(root, commit))
-    const base = fromTree ? undefined : branchBase(root, checkout.defaultRef(), commit)
+    const fingerprint = fromTree ? checkout.tree() : commitFingerprint(root, commit)
+    // From the pushed commit: the branch checked out may have left main somewhere else.
+    const base = branchBase(root, checkout.defaultRef(), fromTree ? 'HEAD' : commit)
     if (fingerprint === checkout.verified) {
-        // So the same changes can push again after a rebase without verifying again.
-        if (base !== undefined) recordPassedPatch(root, base, commit)
+        // So the same changes can push again after a rebase without verifying again. A commit the
+        // same command makes doesn't exist yet; its next push records it.
+        if (base !== undefined && !fromTree) recordPassedPatch(root, base, commit)
         return 'ok'
     }
-    if (onlyUncheckedChanges(checkout, fromTree ? undefined : commit)) return 'ok'
-    if (base !== undefined && hasPassedPatch(root, base, commit)) {
+    if (onlyUncheckedChanges(root, base, fromTree ? undefined : commit)) return 'ok'
+    if (base !== undefined && !fromTree && hasPassedPatch(root, base, commit)) {
         notes.push(`${source} holds changes that already passed verify, so it isn't verified again`)
         return 'ok'
     }
@@ -246,10 +248,11 @@ function checkSource(checkout: Checkout, source: string, kind: 'push' | 'pr'): S
  * checks the whole tree, and records a pass, when there is no default branch to compare with, so
  * then nothing is exempt.
  */
-function onlyUncheckedChanges(checkout: Checkout, commit: string | undefined): boolean {
-    const { root } = checkout
-    // From the pushed commit: the branch checked out may have left main somewhere else.
-    const base = branchBase(root, checkout.defaultRef(), commit ?? 'HEAD')
+function onlyUncheckedChanges(
+    root: string,
+    base: string | undefined,
+    commit: string | undefined,
+): boolean {
     if (base === undefined) return false
     if (commit === undefined)
         return !changedSince(root, base).some((path) => needsChecks(root, path))

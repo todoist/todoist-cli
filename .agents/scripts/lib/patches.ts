@@ -23,16 +23,20 @@ export function readPassedPatches(root: string): PassedPatch[] {
 
 /**
  * An id for everything a commit changes since `base`, the same wherever the changes sit: git's
- * patch id ignores line numbers and file order, but not the lines around each change. So a rebase
- * that changed nothing near the branch's changes keeps the id, and one that did, by a conflict or
- * by new code next to them, doesn't. `--verbatim` keeps whitespace, which the default strips, so
- * a change inside a string or to formatting changes the id. Binary files count by content. A git
- * older than 2.39 has no `--verbatim`, so every rebase there needs verify again.
+ * patch id ignores line numbers and file order, but not the three lines around each change, which
+ * the diff sets itself whatever `diff.context` says. So a rebase that changed nothing near the
+ * branch's changes keeps the id, and one that did, by a conflict or by new code next to them,
+ * doesn't. `--verbatim` keeps whitespace, which the default strips, so a change inside a string or
+ * to formatting changes the id. Binary files count by their full blob ids. A git older than 2.39
+ * has no `--verbatim`, so every rebase there needs verify again.
  */
 export function branchPatchId(root: string, base: string, commit: string): string | undefined {
     const diff = git(root, [
         'diff',
-        '--binary',
+        '--unified=3',
+        '--diff-algorithm=myers',
+        '--src-prefix=a/',
+        '--dst-prefix=b/',
         '--full-index',
         '--no-color',
         '--no-ext-diff',
@@ -61,6 +65,23 @@ export function recordPassedPatch(root: string, base: string, commit: string): v
         writeJson(patchesPath(root), { patches: patches.slice(-MAX_RECORDED) })
     } catch {
         // Nothing to undo: the push or the verify run it follows already succeeded.
+    }
+}
+
+/**
+ * Forgets that the changes `commit` makes since `base` passed, whatever base they passed on: verify
+ * is about to check them again, and a run that doesn't pass must not leave them counted as passed.
+ */
+export function forgetPassedPatch(root: string, base: string, commit: string): void {
+    try {
+        const patchId = branchPatchId(root, base, commit)
+        const patches = readPassedPatches(root)
+        if (patchId === undefined || !patches.some((patch) => patch.patchId === patchId)) return
+        writeJson(patchesPath(root), {
+            patches: patches.filter((patch) => patch.patchId !== patchId),
+        })
+    } catch {
+        // A record that can't be read or written exempts nothing either.
     }
 }
 

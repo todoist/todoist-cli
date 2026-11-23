@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { branchPatchId, hasPassedPatch, readPassedPatches, recordPassedPatch } from './patches.ts'
-import { createTempRepo, type TempRepo } from './test-repo.ts'
+import {
+    branchPatchId,
+    forgetPassedPatch,
+    hasPassedPatch,
+    readPassedPatches,
+    recordPassedPatch,
+} from './patches.ts'
+import { createTempRepo, GIT_HAS_VERBATIM_PATCH_ID, type TempRepo } from './test-repo.ts'
 
 let repo: TempRepo
 
@@ -27,6 +33,7 @@ function moveMainAndRebase(branch: string, path: string, content: string): void 
 beforeEach(() => {
     repo = createTempRepo()
     repo.write('src/other.ts', 'export const other = 1\n')
+    repo.git(['add', 'src/other.ts'])
     commit('src/a.ts', `${LINES.join('\n')}\n`, 'initial')
     repo.git(['switch', '--quiet', '-c', 'feature'])
     commit('src/a.ts', `${LINES.join('\n').replace('line15 = 15', 'line15 = 150')}\n`)
@@ -34,7 +41,8 @@ beforeEach(() => {
 
 afterEach(() => repo.cleanup())
 
-describe('branchPatchId', () => {
+// Without `--verbatim` there is no exemption, and every rebase needs verify again.
+describe.skipIf(!GIT_HAS_VERBATIM_PATCH_ID)('branchPatchId', () => {
     it('keeps the id when a rebase moved the base under unchanged changes', () => {
         const before = branchPatchId(repo.dir, base(), 'HEAD')
         moveMainAndRebase('feature', 'src/other.ts', 'export const other = 2\n')
@@ -51,6 +59,8 @@ describe('branchPatchId', () => {
     })
 
     it('changes the id when the base changed the lines around the change', () => {
+        // Whatever context the person's git config asks diffs for
+        repo.git(['config', 'diff.context', '0'])
         const before = branchPatchId(repo.dir, base(), 'HEAD')
         moveMainAndRebase(
             'feature',
@@ -80,7 +90,7 @@ describe('branchPatchId', () => {
     })
 })
 
-describe('passed patches', () => {
+describe.skipIf(!GIT_HAS_VERBATIM_PATCH_ID)('passed patches', () => {
     it('finds a recorded patch on a newer base, and only there', () => {
         recordPassedPatch(repo.dir, base(), 'HEAD')
         expect(hasPassedPatch(repo.dir, base(), 'HEAD')).toBe(true)
@@ -96,6 +106,20 @@ describe('passed patches', () => {
             readPassedPatches(repo.dir)[0]?.patchId,
         )
         expect(hasPassedPatch(repo.dir, elsewhere, 'HEAD')).toBe(false)
+    })
+
+    it('forgets a patch, whatever base it passed on', () => {
+        recordPassedPatch(repo.dir, base(), 'HEAD')
+        moveMainAndRebase('feature', 'src/other.ts', 'export const other = 2\n')
+        recordPassedPatch(repo.dir, base(), 'HEAD')
+        commit('src/b.ts', 'export const b = 1\n')
+        recordPassedPatch(repo.dir, base(), 'HEAD')
+        repo.git(['reset', '--quiet', '--hard', 'HEAD~1'])
+
+        forgetPassedPatch(repo.dir, base(), 'HEAD')
+        expect(hasPassedPatch(repo.dir, base(), 'HEAD')).toBe(false)
+        // Other changes keep theirs
+        expect(readPassedPatches(repo.dir)).toHaveLength(1)
     })
 
     it('does not find changes that never passed', () => {

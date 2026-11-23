@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { branchPatchId, readPassedPatches } from './patches.ts'
+import { readPassedPatches } from './patches.ts'
+import { checkCommand } from './push-check.ts'
 import { readVerified, stateDir, writeVerified } from './state.ts'
-import { createTempRepo, type TempRepo } from './test-repo.ts'
+import { createTempRepo, GIT_HAS_VERBATIM_PATCH_ID, type TempRepo } from './test-repo.ts'
 import { codeFingerprint, snapshot } from './tree.ts'
 import { runVerify, type Step } from './verify.ts'
 
@@ -57,16 +58,41 @@ describe('a code change', () => {
         expect(lines.some((line) => /^✓ lint \(\d+\.\ds\)$/.test(line))).toBe(true)
     })
 
-    it('records the changes as passed when the tree is exactly the last commit', async () => {
-        await verify([pass('lint')])
-        expect(readPassedPatches(repo.dir)).toEqual([])
+    it.skipIf(!GIT_HAS_VERBATIM_PATCH_ID)(
+        'records the changes as passed when the tree is exactly the last commit',
+        async () => {
+            await verify([pass('lint')])
+            expect(readPassedPatches(repo.dir)).toEqual([])
 
-        repo.git(['commit', '--quiet', '-am', 'change a'])
-        await verify([pass('lint')])
-        expect(readPassedPatches(repo.dir)).toEqual([
-            { patchId: branchPatchId(repo.dir, base, 'HEAD'), base, at: expect.any(String) },
-        ])
-    })
+            repo.git(['commit', '--quiet', '-am', 'change a'])
+            await verify([pass('lint')])
+            expect(readPassedPatches(repo.dir)).toEqual([
+                { patchId: expect.any(String), base, at: expect.any(String) },
+            ])
+        },
+    )
+
+    it.skipIf(!GIT_HAS_VERBATIM_PATCH_ID)(
+        'stops counting the changes as passed once a verify run on them fails',
+        async () => {
+            repo.git(['commit', '--quiet', '-am', 'change a'])
+            await verify([pass('lint')])
+            // main moves on, and the branch is rebased onto it
+            repo.git(['switch', '--quiet', 'main'])
+            repo.write('src/upstream.ts', 'export const u = 1\n')
+            repo.git(['add', '.'])
+            repo.git(['commit', '--quiet', '-m', 'upstream'])
+            repo.git(['switch', '--quiet', 'feature'])
+            repo.git(['rebase', '--quiet', 'main'])
+            const push = () =>
+                checkCommand({ root: repo.dir, command: 'git push origin feature', cwd: repo.dir })
+            expect(push().decision).toBe('allow')
+
+            const moved = repo.git(['merge-base', 'HEAD', 'main']).stdout.trim()
+            await verify([fail('tests')], { base: moved })
+            expect(push().decision).toBe('deny')
+        },
+    )
 
     it('records nothing when a step fails, and forgets an earlier pass', async () => {
         writeVerified(repo.dir, { fingerprint: 'earlier', head: 'x', at: 'then' })

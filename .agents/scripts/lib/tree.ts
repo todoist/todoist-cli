@@ -61,6 +61,11 @@ export function snapshotCommit(root: string, commit: string): Snapshot {
     return files
 }
 
+/** The fingerprint of a commit, comparable with the one verify records for the working tree. */
+export function commitFingerprint(root: string, commit: string): string {
+    return codeFingerprint(snapshotCommit(root, commit))
+}
+
 /**
  * The pull-request workflows that run checks. .agents/scripts/lib/steps.test.ts compares verify
  * with their commands, and reads every other workflow to check none of them runs a command on pull

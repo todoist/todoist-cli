@@ -81,7 +81,7 @@ Tests use vitest with mocked API. `npm run verify` runs them with every other CI
 ## Git hooks and agent tooling
 
 - Commits and pushes to `main` are refused by the git hooks. Work on a branch.
-- Your `git push` and `gh pr create` are stopped until `npm run verify` has passed on exactly the commit being pushed (Claude Code, Codex and Cursor hooks, and a Pi extension). Verify, then commit exactly what it saw, or commit first and verify the clean tree. If something must be pushed unverified, ask the person you're working with to push it.
+- Your `git push` and `gh pr create` are stopped until `npm run verify` has passed on exactly the commit being pushed (Claude Code, Codex and Cursor hooks, and a Pi extension), or on the same changes before a rebase that only moved `main` under them. Verify, then commit exactly what it saw, or commit first and verify the clean tree. If something must be pushed unverified, ask the person you're working with to push it.
 - Agent tooling lives in `.agents/scripts/`, never in `scripts/` (which ships in the npm package).
 - How it all fits together: [`docs/agents.md`](docs/agents.md).
 

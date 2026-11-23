@@ -3,7 +3,12 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { recordPassedPatch } from './patches.ts'
 import { checkCommand, type PushVerdict } from './push-check.ts'
-import { createTempRepo, markVerified as markDirVerified, type TempRepo } from './test-repo.ts'
+import {
+    createTempRepo,
+    GIT_HAS_VERBATIM_PATCH_ID,
+    markVerified as markDirVerified,
+    type TempRepo,
+} from './test-repo.ts'
 
 let repo: TempRepo
 
@@ -247,7 +252,7 @@ describe('pushes it stops before reading them', () => {
     })
 })
 
-describe('pushes of changes that already passed', () => {
+describe.skipIf(!GIT_HAS_VERBATIM_PATCH_ID)('pushes of changes that already passed', () => {
     /** Moves main on with a change to another file, as a merged pull request would. */
     function moveMain(path = 'src/upstream.ts'): void {
         const branch = repo.git(['branch', '--show-current']).stdout.trim()

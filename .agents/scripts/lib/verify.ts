@@ -2,16 +2,16 @@ import { spawn } from 'node:child_process'
 import { createWriteStream, mkdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { cleanGitEnv, git } from './git.ts'
-import { recordPassedPatch } from './patches.ts'
+import { forgetPassedPatch, recordPassedPatch } from './patches.ts'
 import { clearVerified, stateDir, writeVerified } from './state.ts'
 import {
     changedCodePaths,
     changedSince,
     classify,
     codeFingerprint,
+    commitFingerprint,
     needsChecks,
     snapshot,
-    snapshotCommit,
 } from './tree.ts'
 
 export type Step = {
@@ -62,9 +62,12 @@ export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
     }
 
     // From here the checks run, so a run that does not end in a pass must not leave an earlier
-    // pass behind. (A docs-only run returns above: docs are outside the fingerprint, so an
-    // earlier pass is still valid.)
+    // pass behind, of the tree or of the branch's changes. (A docs-only run returns above: docs
+    // are outside the fingerprint, so an earlier pass is still valid.)
     clearVerified(root)
+    const head = git(root, ['rev-parse', 'HEAD'])
+    const commit = head.ok ? head.stdout.trim() : undefined
+    if (commit !== undefined && base !== undefined) forgetPassedPatch(root, base, commit)
     const before = snapshot(root)
 
     const logDir = join(stateDir(root), 'logs')
@@ -79,19 +82,13 @@ export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
         return { ok: false, recorded: false }
     }
 
-    const head = git(root, ['rev-parse', 'HEAD'])
     const fingerprint = codeFingerprint(after)
-    writeVerified(root, {
-        fingerprint,
-        head: head.ok ? head.stdout.trim() : 'none',
-        at: new Date().toISOString(),
-    })
+    writeVerified(root, { fingerprint, head: commit ?? 'none', at: new Date().toISOString() })
     // When the tree is exactly the last commit, its changes can push again after a rebase.
-    const commit = head.stdout.trim()
     if (
-        head.ok &&
+        commit !== undefined &&
         base !== undefined &&
-        codeFingerprint(snapshotCommit(root, commit)) === fingerprint
+        commitFingerprint(root, commit) === fingerprint
     ) {
         recordPassedPatch(root, base, commit)
     }
