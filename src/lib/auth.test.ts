@@ -535,6 +535,56 @@ describe('lib/auth', () => {
             expect(fetchTodoistMock).not.toHaveBeenCalled()
         })
 
+        it('reuses a token another process already rotated instead of rotating it again', async () => {
+            setConfig({
+                config_version: 2,
+                users: [
+                    plaintextUser({
+                        api_token: 'rotated-elsewhere',
+                        refresh_token: 'current-refresh',
+                        access_token_expires_at: Date.now() + 1_800_000,
+                        has_refresh_token: true,
+                    }),
+                ],
+            })
+
+            const { replaceRejectedToken } = await import('./auth-refresh.js')
+
+            await expect(replaceRejectedToken('111', 'old-access')).resolves.toBe(
+                'rotated-elsewhere',
+            )
+            expect(fetchTodoistMock).not.toHaveBeenCalled()
+        })
+
+        it('rotates a refused token even when it has not expired yet', async () => {
+            setConfig({
+                config_version: 2,
+                users: [
+                    plaintextUser({
+                        refresh_token: 'old-refresh',
+                        access_token_expires_at: Date.now() + 1_800_000,
+                        has_refresh_token: true,
+                    }),
+                ],
+            })
+            fetchTodoistMock.mockResolvedValue(
+                tokenResponse({
+                    access_token: 'new-access',
+                    refresh_token: 'new-refresh',
+                    token_type: 'Bearer',
+                    expires_in: 3600,
+                }),
+            )
+
+            const { replaceRejectedToken } = await import('./auth-refresh.js')
+
+            await expect(replaceRejectedToken('111', 'old-access')).resolves.toBe('new-access')
+            expect(persistedUser()).toMatchObject({
+                api_token: 'new-access',
+                refresh_token: 'new-refresh',
+            })
+        })
+
         it('keeps the stored token when a refresh fails to connect before it expires', async () => {
             setConfig({
                 config_version: 2,

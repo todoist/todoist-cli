@@ -24,16 +24,18 @@ import { createRefreshingFetch } from './refreshing-fetch.js'
 let apiClient: TodoistApi | null = null
 
 /**
- * Why the last refresh after a 401 failed. The SDK turns a 401 into its own
- * error with nothing but the status, so `toCliError` reports this instead
- * when it is set: a rejected refresh token, say, rather than a bare 401.
+ * Why the refresh after a 401 failed. The SDK turns a 401 into its own error
+ * with nothing but the status, so `toCliError` reports this reason instead,
+ * a rejected refresh token, say, rather than a bare 401. Once a refresh has
+ * failed, the client doesn't try another for the same token
+ * (`createRefreshingFetch`), so this stays the reason for every later 401.
  */
 let refreshFailure: unknown
 
 /** Loaded on first use: accounts whose tokens never expire never need it. */
-async function forceRefresh(userId: string): Promise<string> {
-    const { refreshStoredToken } = await import('../auth-refresh.js')
-    return refreshStoredToken(userId, { force: true })
+async function replaceRejected(userId: string, rejectedToken: string): Promise<string> {
+    const { replaceRejectedToken } = await import('../auth-refresh.js')
+    return replaceRejectedToken(userId, rejectedToken)
 }
 
 // Mapping of API method names to user-friendly spinner messages
@@ -346,7 +348,13 @@ async function toCliError(error: unknown, methodName?: string): Promise<Error> {
             return new CliError('PREMIUM_REQUIRED', describeRequestError(error), [PREMIUM_HINT])
         }
         if (status === 401 && refreshFailure instanceof Error) {
-            return refreshFailure
+            // Still AUTH_ERROR, which callers that classify a refused request
+            // by code rely on (`task add-many`), with the refresh's reason.
+            const transient =
+                (refreshFailure as { code?: unknown }).code === 'AUTH_REFRESH_TRANSIENT'
+            return new CliError('AUTH_ERROR', refreshFailure.message, [
+                transient ? 'Try again' : 'Run: td auth login',
+            ])
         }
         if (status === 401 || status === 403) {
             return new CliError('AUTH_ERROR', error.message, [
@@ -401,7 +409,7 @@ function analyzeAndEmitApiResponse(
 
 export function createApiForToken(
     token: string,
-    options: { refresh?: () => Promise<string> } = {},
+    options: { refresh?: (rejectedToken: string) => Promise<string> } = {},
 ): TodoistApi {
     const trackedFetch = createTrackedFetch()
     const customFetch = options.refresh
@@ -423,7 +431,9 @@ export async function getApi(): Promise<TodoistApi> {
         const resolved = await resolveActiveUser()
         apiClient = createApiForToken(
             resolved.token,
-            resolved.canRefresh ? { refresh: () => forceRefresh(resolved.id) } : {},
+            resolved.canRefresh
+                ? { refresh: (rejectedToken) => replaceRejected(resolved.id, rejectedToken) }
+                : {},
         )
         // Seed the user-id cache from config when known so callers like
         // `getCurrentUserId` don't pay an extra `api.getUser()` round trip.

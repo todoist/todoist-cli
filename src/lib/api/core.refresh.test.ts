@@ -5,7 +5,7 @@ import type { ResolvedUser } from '../auth.js'
 
 const mocks = vi.hoisted(() => ({
     resolveActiveUser: vi.fn(),
-    refreshStoredToken: vi.fn(),
+    replaceRejectedToken: vi.fn(),
     fetch: vi.fn(),
 }))
 
@@ -15,7 +15,7 @@ vi.mock('../auth.js', async (importOriginal) => ({
 }))
 
 // The refresh grant and its lock; `src/lib/auth.test.ts` runs them for real.
-vi.mock('../auth-refresh.js', () => ({ refreshStoredToken: mocks.refreshStoredToken }))
+vi.mock('../auth-refresh.js', () => ({ replaceRejectedToken: mocks.replaceRejectedToken }))
 
 // The HTTP boundary: every SDK request goes through this fetch.
 vi.mock('../usage-tracking.js', async (importOriginal) => ({
@@ -64,19 +64,19 @@ describe('getApi with an expiring OAuth token', () => {
 
     it('retries a request refused with a 401 using a refreshed token', async () => {
         mocks.resolveActiveUser.mockResolvedValue(storedUser(true))
-        mocks.refreshStoredToken.mockResolvedValue('new-token')
+        mocks.replaceRejectedToken.mockResolvedValue('new-token')
         acceptOnly('new-token')
 
         const { getApi } = await import('./core.js')
         const api = await getApi()
 
         await expect(api.getLabels()).resolves.toEqual({ results: [], nextCursor: null })
-        expect(mocks.refreshStoredToken).toHaveBeenCalledWith('111', { force: true })
+        expect(mocks.replaceRejectedToken).toHaveBeenCalledWith('111', 'old-token')
     })
 
     it('reports why the refresh failed when the 401 cannot be retried', async () => {
         mocks.resolveActiveUser.mockResolvedValue(storedUser(true))
-        mocks.refreshStoredToken.mockRejectedValue(
+        mocks.replaceRejectedToken.mockRejectedValue(
             new BaseCliError('AUTH_REFRESH_EXPIRED', 'Refresh token rejected: invalid_grant', {
                 hints: ['Re-run the login command to reauthorize.'],
             }),
@@ -86,9 +86,12 @@ describe('getApi with an expiring OAuth token', () => {
         const { getApi } = await import('./core.js')
         const api = await getApi()
 
+        // Still AUTH_ERROR, so callers that classify a refused request by code
+        // (`task add-many`) keep working; the message and hint say why.
         await expect(api.getLabels()).rejects.toMatchObject({
-            code: 'AUTH_REFRESH_EXPIRED',
+            code: 'AUTH_ERROR',
             message: 'Refresh token rejected: invalid_grant',
+            hints: ['Run: td auth login'],
         })
     })
 
@@ -100,7 +103,7 @@ describe('getApi with an expiring OAuth token', () => {
         const api = await getApi()
 
         await expect(api.getLabels()).rejects.toMatchObject({ code: 'AUTH_ERROR' })
-        expect(mocks.refreshStoredToken).not.toHaveBeenCalled()
+        expect(mocks.replaceRejectedToken).not.toHaveBeenCalled()
         expect(mocks.fetch).toHaveBeenCalledTimes(1)
     })
 })

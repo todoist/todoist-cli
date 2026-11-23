@@ -48,13 +48,18 @@ describe('createRefreshingFetch', () => {
 
         expect(first.status).toBe(200)
         expect(second.status).toBe(200)
-        expect(refresh).toHaveBeenCalledTimes(1)
+        // The refresh learns which token was refused, to spot one another
+        // process has already replaced.
+        expect(refresh).toHaveBeenCalledExactlyOnceWith('old-token')
         expect(api.sentTokens).toEqual(['old-token', 'new-token', 'new-token'])
-        // The retry resends the same request, body included.
+        // The retry resends the same request, body and other headers included.
         expect(api.fetch.mock.calls[1]).toEqual([
             'https://api.todoist.com/api/v1/tasks',
             expect.objectContaining({ method: 'POST', body: '{"content":"Buy milk"}' }),
         ])
+        expect(new Headers(api.fetch.mock.calls[1][1]?.headers).get('Content-Type')).toBe(
+            'application/json',
+        )
     })
 
     it('shares one refresh between requests refused at the same time', async () => {
@@ -96,6 +101,27 @@ describe('createRefreshingFetch', () => {
         expect(result.status).toBe(401)
         expect(onRefreshFailed).toHaveBeenCalledWith(failure)
         expect(api.sentTokens).toEqual(['old-token'])
+    })
+
+    it('does not try the refresh again for later requests once it has failed', async () => {
+        const api = fakeApi({ current: 'never-issued' })
+        const refresh = vi.fn(async () => {
+            throw new Error('Refresh token rejected: invalid_grant')
+        })
+        const onRefreshFailed = vi.fn()
+        const fetch = createRefreshingFetch({
+            fetch: api.fetch,
+            token: 'old-token',
+            refresh,
+            onRefreshFailed,
+        })
+
+        const first = await fetch('https://api.todoist.com/api/v1/tasks', REQUEST)
+        const second = await fetch('https://api.todoist.com/api/v1/projects', REQUEST)
+
+        expect([first.status, second.status]).toEqual([401, 401])
+        expect(refresh).toHaveBeenCalledTimes(1)
+        expect(onRefreshFailed).toHaveBeenCalledTimes(1)
     })
 
     it('does not refresh again when the retry is refused too', async () => {
