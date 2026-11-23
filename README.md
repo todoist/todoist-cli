@@ -75,6 +75,8 @@ This opens your browser to authenticate with Todoist. Once approved, the token i
 - Windows: Credential Manager
 - Linux: Secret Service/libsecret
 
+The access token expires after an hour, and `td` refreshes it as needed. Scripts that need the raw token should run `td auth token view` each time rather than saving its output.
+
 Secure storage is required by default. If it is unavailable, login fails without writing a credential to disk. To explicitly use plaintext config-file storage, pass `--credential-store=plaintext`; the CLI always prints a warning when it writes a credential this way. Existing plaintext tokens are migrated automatically the next time the CLI reads them successfully from the config file.
 
 For a read-only OAuth token (scope `data:read`), run:

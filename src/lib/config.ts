@@ -69,6 +69,8 @@ export interface StoredUser {
     auth_mode?: AuthMode
     auth_scope?: string
     auth_flags?: AuthFlag[]
+    /** The OAuth client the token was issued to, which a refresh must use. */
+    oauth_client_id?: string
     api_token?: string
     refresh_token?: string
     access_token_expires_at?: number
@@ -117,6 +119,7 @@ const KNOWN_STORED_USER_KEYS: ReadonlySet<string> = new Set([
     'auth_mode',
     'auth_scope',
     'auth_flags',
+    'oauth_client_id',
     'api_token',
     'refresh_token',
     'access_token_expires_at',
@@ -284,6 +287,12 @@ export function validateConfigForDoctor(config: Record<string, unknown>): string
                 }
                 if (entry.api_token !== undefined && typeof entry.api_token !== 'string') {
                     issues.push(`users[${i}].api_token must be a string`)
+                }
+                if (
+                    entry.oauth_client_id !== undefined &&
+                    typeof entry.oauth_client_id !== 'string'
+                ) {
+                    issues.push(`users[${i}].oauth_client_id must be a string`)
                 }
                 if (entry.refresh_token !== undefined && typeof entry.refresh_token !== 'string') {
                     issues.push(`users[${i}].refresh_token must be a string`)

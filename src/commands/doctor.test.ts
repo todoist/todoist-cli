@@ -228,7 +228,7 @@ describe('doctor command', () => {
         expect(process.exitCode).toBeUndefined()
     })
 
-    it('accepts the refresh fields on a stored user and reports them when malformed', async () => {
+    it('accepts the OAuth client and refresh fields on a stored user and reports them when malformed', async () => {
         mockReadFile.mockResolvedValue(
             JSON.stringify({
                 config_version: 2,
@@ -240,6 +240,7 @@ describe('doctor command', () => {
                         access_token_expires_at: 'soon',
                         refresh_token_expires_at: 1_900_000_000_000,
                         has_refresh_token: 'yes',
+                        oauth_client_id: 7,
                     },
                 ],
             }),
@@ -258,6 +259,7 @@ describe('doctor command', () => {
         expect(configWarning).toContain('users[0].access_token_expires_at must be a number')
         expect(configWarning).not.toContain('refresh_token_expires_at must be a number')
         expect(configWarning).toContain('users[0].has_refresh_token must be a boolean')
+        expect(configWarning).toContain('users[0].oauth_client_id must be a string')
     })
 
     it('warns when config fields are invalid or unrecognized', async () => {

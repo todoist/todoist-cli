@@ -141,11 +141,15 @@ describe('createTodoistUserRecordStore', () => {
         expect(persisted.user).toBeUndefined()
     })
 
-    it('round-trips the refresh token and expiry fields of an OAuth token bundle', async () => {
+    it('round-trips the OAuth client, refresh token and expiry fields of a token bundle', async () => {
         const { createTodoistUserRecordStore } = await import('./user-records.js')
         const store = createTodoistUserRecordStore()
+        const account = {
+            ...ACCOUNT_A,
+            oauth_client_id: 'https://api.todoist.com/.well-known/oauth-client-cli',
+        }
         await store.upsert({
-            account: ACCOUNT_A,
+            account,
             fallbackToken: 'access-plaintext',
             fallbackRefreshToken: 'refresh-plaintext',
             accessTokenExpiresAt: 1_800_000_000_000,
@@ -159,6 +163,7 @@ describe('createTodoistUserRecordStore', () => {
             email: 'a@example.com',
             auth_mode: 'read-write',
             auth_scope: 'data:read_write',
+            oauth_client_id: 'https://api.todoist.com/.well-known/oauth-client-cli',
             api_token: 'access-plaintext',
             refresh_token: 'refresh-plaintext',
             access_token_expires_at: 1_800_000_000_000,
@@ -167,7 +172,7 @@ describe('createTodoistUserRecordStore', () => {
         })
         expect(await store.list()).toEqual([
             {
-                account: ACCOUNT_A,
+                account,
                 fallbackToken: 'access-plaintext',
                 fallbackRefreshToken: 'refresh-plaintext',
                 accessTokenExpiresAt: 1_800_000_000_000,

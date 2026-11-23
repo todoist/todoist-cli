@@ -18,6 +18,9 @@ function recordToStoredUser(record: UserRecord<TodoistAccount>): StoredUser {
         auth_scope: record.account.auth_scope,
         auth_flags: record.account.auth_flags,
     }
+    if (record.account.oauth_client_id !== undefined) {
+        stored.oauth_client_id = record.account.oauth_client_id
+    }
     if (record.fallbackToken !== undefined) {
         stored.api_token = record.fallbackToken
     }
@@ -44,6 +47,7 @@ function storedUserToRecord(user: StoredUser): UserRecord<TodoistAccount> {
             authMode: user.auth_mode ?? 'unknown',
             authScope: user.auth_scope,
             authFlags: user.auth_flags,
+            oauthClientId: user.oauth_client_id,
         }),
     }
     if (user.api_token !== undefined) {

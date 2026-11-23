@@ -65,6 +65,12 @@ export type TodoistAccount = AuthAccount & {
     auth_mode: AuthMode
     auth_scope?: string
     auth_flags?: AuthFlag[]
+    /**
+     * The OAuth client the token was issued to. Todoist binds refresh tokens to
+     * their client, so a refresh has to send this one. Unset for tokens that
+     * never expire, which never refresh.
+     */
+    oauth_client_id?: string
 }
 
 export type TodoistAccountInput = {
@@ -73,6 +79,7 @@ export type TodoistAccountInput = {
     authMode: AuthMode
     authScope?: string
     authFlags?: AuthFlag[]
+    oauthClientId?: string
 }
 
 /**
@@ -88,6 +95,7 @@ export function toTodoistAccount(input: TodoistAccountInput): TodoistAccount {
         auth_mode: input.authMode,
         auth_scope: input.authScope,
         auth_flags: input.authFlags,
+        ...(input.oauthClientId ? { oauth_client_id: input.oauthClientId } : {}),
     }
 }
 

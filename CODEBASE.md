@@ -180,8 +180,9 @@ New subcommand? Copy a sibling in the target group, wire it in that group's
 - **`config.ts`** — `~/.config/todoist-cli/config.json` read/write,
   `stripLegacyAuthFields`, `AuthMode`, `UpdateChannel`, `AUTH_FLAG_ORDER`.
 - **`auth-provider.ts`** — `createTodoistAuthProvider()`: cli-core PKCE
-  provider with Todoist `validateToken` (builds `auth_mode` / `auth_scope` /
-  `auth_flags` from `getUser`).
+  provider signing in as the client ID metadata document at `OAUTH_CLIENT_ID`,
+  with a Todoist `validateToken` (builds `auth_mode` / `auth_scope` /
+  `auth_flags` from the granted scope, and records `oauth_client_id`).
 - **`auth-store.ts`** — `createTodoistTokenStore()` (cli-core
   `createKeyringTokenStore` wired to the `UserRecordStore` adapter),
   persisted identifier constants (`SERVICE_NAME`, `LEGACY_ACCOUNT`,
@@ -335,10 +336,14 @@ env `TODOIST_API_TOKEN` first, then a config-derived target user, then either
 `StoredUser.api_token` (plaintext keyring-offline fallback) or cli-core's
 `createSecureStore` for the keyring slot.
 
-Expiring tokens: a user record with `access_token_expires_at` holds an OAuth
-access token that expires, with its refresh token in the keyring slot
-`user-<id>/refresh` (or `refresh_token` in plaintext). Records without it hold
-tokens that never expire and are read exactly as above. `auth.ts` refreshes a
+Expiring tokens: `td auth login` signs in as the client ID metadata document
+the Todoist backend serves at `OAUTH_CLIENT_ID`, whose access tokens expire
+after an hour. A user record with `access_token_expires_at` holds one, with its
+refresh token in the keyring slot `user-<id>/refresh` (or `refresh_token` in
+plaintext) and the client it was issued to in `oauth_client_id`, which a
+refresh sends. Records without it (accounts that signed in through the
+registered Todoist CLI app, or `td auth token`) hold tokens that never expire
+and are read exactly as above. `auth.ts` refreshes a
 token within `REFRESH_SKEW_MS` of expiring before returning it, loading
 `auth-refresh.ts` (cli-core's `refreshAccessToken`, with a lock file next to
 the config) only then. `getApi()` wraps a refreshable account's fetch with

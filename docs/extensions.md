@@ -78,7 +78,7 @@ Everything else the user has exported is inherited as usual.
 **The API token is never injected.** Most extensions should not need it: `td … --json` covers most cases and keeps you insulated from API changes. If you do need the raw token:
 
 - If `TODOIST_API_TOKEN` is set, the user has exported it themselves and you inherit it like any other variable. Use it directly. `td auth token view` refuses to print it (`TOKEN_FROM_ENV`).
-- Otherwise run `td auth token view`. Like every other command, it acts as the account in `TD_USER`, so you get the token for the account the user chose.
+- Otherwise run `td auth token view`. Like every other command, it acts as the account in `TD_USER`, so you get the token for the account the user chose. A token from `td auth login` expires after an hour, so run it each time you need the token rather than keeping it.
 
 ## Calling td from an extension
 

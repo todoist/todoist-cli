@@ -1,10 +1,37 @@
-import { AUTH_FLAG_ORDER, type AuthFlag } from './config.js'
+import { AUTH_FLAG_ORDER, type AuthFlag, type AuthMode } from './config.js'
 import { CliError } from './errors.js'
 
 /** Base OAuth scopes for read-write logins (the default). */
 export const READ_WRITE_SCOPES = 'data:read_write,data:delete,project:delete'
 /** Base OAuth scope for `--read-only` logins. */
 export const READ_ONLY_SCOPES = 'data:read'
+
+/**
+ * How an account records the scope Todoist granted, from the token response.
+ * The grant can be narrower than the request: the user may choose read-only
+ * access on the consent screen, and Todoist leaves out scopes the client can't
+ * be granted. The codes may be separated by spaces (what metadata clients get)
+ * or commas; `authScope` is stored comma-joined, like `resolveAuthScope`.
+ */
+export function describeGrantedScope(granted: string): {
+    authMode: AuthMode
+    authScope: string
+    authFlags: AuthFlag[]
+} {
+    const codes = granted.split(/[\s,]+/).filter(Boolean)
+    const readOnly = !codes.includes('data:read_write')
+    const flags = new Set<AuthFlag>(readOnly ? ['read-only'] : [])
+    for (const def of ADDITIONAL_SCOPES) {
+        if (codes.some((code) => code === def.oauthScope || code === def.readOnlyScope)) {
+            flags.add(def.flag)
+        }
+    }
+    return {
+        authMode: readOnly ? 'read-only' : 'read-write',
+        authScope: codes.join(','),
+        authFlags: AUTH_FLAG_ORDER.filter((flag) => flags.has(flag)),
+    }
+}
 
 export type AuthScopeOptions = {
     readOnly?: boolean

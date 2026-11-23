@@ -20,6 +20,9 @@ export function getTokenRefreshOptions(): TokenRefreshOptions<TodoistAccount> {
         provider: createTodoistAuthProvider(),
         lockPath: `${getConfigPath()}.refresh.lock`,
         skewMs: REFRESH_SKEW_MS,
+        // Todoist binds a refresh token to the client it was issued to.
+        handshake: ({ account }) =>
+            account.oauth_client_id ? { clientId: account.oauth_client_id } : {},
     }
 }
 
