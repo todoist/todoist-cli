@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { createWriteStream, mkdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { cleanGitEnv, git } from './git.ts'
+import { recordPassedPatch } from './patches.ts'
 import { clearVerified, stateDir, writeVerified } from './state.ts'
 import {
     changedCodePaths,
@@ -10,6 +11,7 @@ import {
     codeFingerprint,
     needsChecks,
     snapshot,
+    snapshotCommit,
 } from './tree.ts'
 
 export type Step = {
@@ -84,6 +86,15 @@ export async function runVerify(options: VerifyOptions): Promise<VerifyResult> {
         head: head.ok ? head.stdout.trim() : 'none',
         at: new Date().toISOString(),
     })
+    // When the tree is exactly the last commit, its changes can push again after a rebase.
+    const commit = head.stdout.trim()
+    if (
+        head.ok &&
+        base !== undefined &&
+        codeFingerprint(snapshotCommit(root, commit)) === fingerprint
+    ) {
+        recordPassedPatch(root, base, commit)
+    }
     out(`Verified. Recorded fingerprint ${fingerprint.slice(0, 12)}.`)
     return { ok: true, recorded: true }
 }

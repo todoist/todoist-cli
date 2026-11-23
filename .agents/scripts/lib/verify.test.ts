@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { branchPatchId, readPassedPatches } from './patches.ts'
 import { readVerified, stateDir, writeVerified } from './state.ts'
 import { createTempRepo, type TempRepo } from './test-repo.ts'
 import { codeFingerprint, snapshot } from './tree.ts'
@@ -54,6 +55,17 @@ describe('a code change', () => {
         expect(result).toEqual({ ok: true, recorded: true })
         expect(readVerified(repo.dir)?.fingerprint).toBe(codeFingerprint(snapshot(repo.dir)))
         expect(lines.some((line) => /^✓ lint \(\d+\.\ds\)$/.test(line))).toBe(true)
+    })
+
+    it('records the changes as passed when the tree is exactly the last commit', async () => {
+        await verify([pass('lint')])
+        expect(readPassedPatches(repo.dir)).toEqual([])
+
+        repo.git(['commit', '--quiet', '-am', 'change a'])
+        await verify([pass('lint')])
+        expect(readPassedPatches(repo.dir)).toEqual([
+            { patchId: branchPatchId(repo.dir, base, 'HEAD'), base, at: expect.any(String) },
+        ])
     })
 
     it('records nothing when a step fails, and forgets an earlier pass', async () => {
