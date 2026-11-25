@@ -7,7 +7,7 @@ import {
     describeEmptyMachineOutput,
 } from '@todoist/cli-core/testing'
 import { TodoistRequestError } from '@todoist/sdk'
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/api/core.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../lib/api/core.js')>()
@@ -28,6 +28,7 @@ vi.mock('../../lib/auth.js', async (importOriginal) => {
 import { wrapApiError } from '../../lib/api/core.js'
 import { getAuthMetadata } from '../../lib/auth.js'
 import { CliError } from '../../lib/errors.js'
+import { resetGlobalArgs } from '../../lib/global-args.js'
 import { setupApiMock } from '../../test-support/api-mock.js'
 import { type MockApi } from '../../test-support/mock-api.js'
 import { registerAppsCommand } from './index.js'
@@ -2068,6 +2069,180 @@ describe('apps update --icon', () => {
     })
 })
 
+describe('apps reset-secret', () => {
+    let mockApi: MockApi
+
+    const NEW_SECRET = 'new-secret-123'
+
+    beforeEach(() => {
+        vi.clearAllMocks()
+        mockApi = setupApiMock()
+    })
+
+    afterEach(() => {
+        resetGlobalArgs()
+    })
+
+    function run(...args: string[]) {
+        return createProgram().parseAsync(['node', 'td', 'apps', 'reset-secret', ...args])
+    }
+
+    function primeReset() {
+        mockApi.getApp.mockResolvedValue(APP_A_DETAIL)
+        mockApi.resetAppClientSecret.mockResolvedValue(APP_A_DETAIL)
+        mockApi.getAppSecrets.mockResolvedValue({
+            clientId: 'client-abc',
+            clientSecret: NEW_SECRET,
+        })
+    }
+
+    it('with --yes resets the secret, then reads and prints the new one', async () => {
+        const consoleSpy = captureConsole()
+        primeReset()
+
+        await run('id:9909', '--yes')
+
+        expect(mockApi.resetAppClientSecret).toHaveBeenCalledWith('9909')
+        expect(mockApi.getAppSecrets).toHaveBeenCalledWith('9909')
+        // The secret is read back after the reset, never before it.
+        expect(mockApi.resetAppClientSecret.mock.invocationCallOrder[0]).toBeLessThan(
+            mockApi.getAppSecrets.mock.invocationCallOrder[0],
+        )
+        const output = consoleSpy.mock.calls.map((c) => c[0]).join('\n')
+        expect(output).toContain('Reset the client secret for: Todoist for VS Code (id:9909)')
+        expect(output).toContain('  Client ID:          client-abc')
+        expect(output).toContain(`  Client secret:      ${NEW_SECRET}`)
+        expect(output).toContain(
+            'The previous secret no longer works. Update every service that uses it with the new one.',
+        )
+    })
+
+    it('without --yes previews the reset with a warning and sends nothing', async () => {
+        const consoleSpy = captureConsole()
+        mockApi.getApp.mockResolvedValue(APP_A_DETAIL)
+
+        await run('id:9909')
+
+        expect(mockApi.resetAppClientSecret).not.toHaveBeenCalled()
+        expect(mockApi.getAppSecrets).not.toHaveBeenCalled()
+        expect(consoleSpy.mock.calls.map((c) => c[0])).toEqual([
+            'Would reset the client secret for: Todoist for VS Code (id:9909)',
+            'The current client secret stops working immediately: every service using it breaks until it is updated with the new one.',
+            'Use --yes to confirm.',
+        ])
+    })
+
+    it('--dry-run previews with the warning and sends nothing, even with --yes', async () => {
+        const consoleSpy = captureConsole()
+        mockApi.getApp.mockResolvedValue(APP_A_DETAIL)
+
+        await run('id:9909', '--dry-run', '--yes')
+
+        expect(mockApi.resetAppClientSecret).not.toHaveBeenCalled()
+        expect(mockApi.getAppSecrets).not.toHaveBeenCalled()
+        const output = consoleSpy.mock.calls.map((c) => c[0]).join('\n')
+        expect(output).toContain('[dry-run] Would reset client secret:')
+        expect(output).toContain('  App: Todoist for VS Code')
+        expect(output).toContain('  ID: 9909')
+        expect(output).toContain('stops working immediately')
+        expect(output).not.toContain(NEW_SECRET)
+    })
+
+    it('--json --yes prints the app with the new clientSecret', async () => {
+        const consoleSpy = captureConsole()
+        primeReset()
+
+        await run('id:9909', '--yes', '--json')
+
+        expect(JSON.parse(consoleSpy.mock.calls[0][0])).toEqual({
+            id: '9909',
+            clientId: 'client-abc',
+            displayName: 'Todoist for VS Code',
+            status: 'public',
+            serviceUrl: 'http://localhost',
+            oauthRedirectUri: 'vscode://doist.todoist-vs-code/auth-complete',
+            appTokenScopes: ['data:read', 'data:read_write'],
+            clientType: 'confidential',
+            iconSm: null,
+            iconMd: 'https://cdn.example.com/icon.png',
+            iconLg: null,
+            userCount: 42,
+            clientSecret: NEW_SECRET,
+        })
+    })
+
+    it('--json without --yes throws CONFIRMATION_REQUIRED before any API call', async () => {
+        await expect(run('id:9909', '--json')).rejects.toMatchObject({
+            code: 'CONFIRMATION_REQUIRED',
+        })
+        expect(mockApi.getApp).not.toHaveBeenCalled()
+        expect(mockApi.resetAppClientSecret).not.toHaveBeenCalled()
+    })
+
+    it('with --quiet prints only the new secret', async () => {
+        const originalArgv = process.argv
+        process.argv = ['node', 'td', '--quiet', 'apps', 'reset-secret', 'id:9909', '--yes']
+        resetGlobalArgs()
+        try {
+            const consoleSpy = captureConsole()
+            primeReset()
+
+            await run('id:9909', '--yes')
+
+            expect(consoleSpy.mock.calls.map((c) => c[0])).toEqual([NEW_SECRET])
+        } finally {
+            process.argv = originalArgv
+        }
+    })
+
+    it('resolves an app by name before resetting', async () => {
+        captureConsole()
+        primeReset()
+        mockApi.getApps.mockResolvedValue([APP_A, APP_B])
+
+        await run('Todoist for VS Code', '--yes')
+
+        expect(mockApi.resetAppClientSecret).toHaveBeenCalledWith('9909')
+    })
+
+    it('throws APP_NOT_FOUND for an unknown app and never resets', async () => {
+        mockApi.getApps.mockResolvedValue([APP_A])
+
+        await expect(run('nope', '--yes')).rejects.toMatchObject({ code: 'APP_NOT_FOUND' })
+        expect(mockApi.resetAppClientSecret).not.toHaveBeenCalled()
+    })
+
+    it('does not read secrets when the reset itself fails', async () => {
+        mockApi.getApp.mockResolvedValue(APP_A_DETAIL)
+        mockApi.resetAppClientSecret.mockRejectedValue(
+            new CliError('API_ERROR', 'HTTP 403: Forbidden'),
+        )
+
+        await expect(run('id:9909', '--yes')).rejects.toMatchObject({ code: 'API_ERROR' })
+        expect(mockApi.getAppSecrets).not.toHaveBeenCalled()
+    })
+
+    it('says the secret was already reset, and how to read it, when the read-back fails', async () => {
+        primeReset()
+        mockApi.getAppSecrets.mockRejectedValue(
+            new CliError('API_ERROR', 'HTTP 503: Service Unavailable'),
+        )
+
+        const error = await run('id:9909', '--yes').catch((e: unknown) => e)
+
+        expect(error).toMatchObject({
+            code: 'PARTIAL_FAILURE',
+            message:
+                'The client secret for Todoist for VS Code (id:9909) was reset, but reading the new secret failed: HTTP 503: Service Unavailable',
+            hints: [
+                'The old secret no longer works. Do not reset it again.',
+                'Read the new secret with: td apps view id:9909 --include-secrets',
+            ],
+        })
+        expect(mockApi.resetAppClientSecret).toHaveBeenCalledTimes(1)
+    })
+})
+
 describe('apps delete', () => {
     let mockApi: MockApi
 
@@ -2179,7 +2354,14 @@ describe('wrapApiError → MISSING_SCOPE detection', () => {
     })
 
     it('emits the app-management hint for app-management methods (read and write)', async () => {
-        for (const method of ['getApps', 'getApp', 'updateApp', 'uploadAppIcon', 'deleteApp']) {
+        for (const method of [
+            'getApps',
+            'getApp',
+            'updateApp',
+            'uploadAppIcon',
+            'deleteApp',
+            'resetAppClientSecret',
+        ]) {
             const wrapped = (await wrapApiError(scopeError(), method)) as CliError
             expect(wrapped.code).toBe('MISSING_SCOPE')
             expect(wrapped.hints?.[0]).toContain('--additional-scopes=app-management')

@@ -189,6 +189,7 @@ export function createMockApi(overrides: Partial<TodoistApi> = {}): MockApi {
         updateApp: vi.fn(),
         uploadAppIcon: vi.fn(),
         deleteApp: vi.fn().mockResolvedValue(true),
+        resetAppClientSecret: vi.fn(),
         // Billing
         getSubscriptionInfo: vi.fn(),
         getProPlanDetails: vi.fn(),

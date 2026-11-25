@@ -5,6 +5,7 @@ import { failWithUsage } from '../../lib/missing-argument.js'
 import { deleteApp } from './delete.js'
 import { APP_ICON_SIZES } from './helpers.js'
 import { listApps } from './list.js'
+import { resetAppSecret } from './reset-secret.js'
 import { updateApp } from './update.js'
 import { viewApp } from './view.js'
 
@@ -32,6 +33,8 @@ Examples:
   td apps update id:9909 --client-type public
   td apps update id:9909 --icon ./icon.png
   td apps update id:9909 --icon ./icon-60.png --icon-size small
+  td apps reset-secret id:9909 --yes
+  td apps reset-secret id:9909 --yes --json
   td apps delete id:9909 --yes
 
 Sensitive values (client id, client secret, verification token, test token,
@@ -104,6 +107,38 @@ Requires authenticating with the dev:app_console scope:
                 return
             }
             return updateApp(ref, options)
+        })
+
+    const resetSecretCmd = apps
+        .command('reset-secret [ref]')
+        .description(
+            "Reset an app's OAuth client secret and print the new one (by name, id:N, or raw id)",
+        )
+        .option('--yes', 'Confirm the reset (the current secret stops working immediately)')
+        .option('--dry-run', 'Preview what would happen without executing')
+        .option('--json', 'Output the app and its new client secret as JSON')
+        .addHelpText(
+            'after',
+            `
+The current client secret stops working immediately, with no overlap period.
+Every service that uses it breaks until it is updated with the new secret.
+Without --yes the command only previews the reset and sends nothing.
+
+Only the app's owner can reset its secret. If the reset succeeds but reading
+the new secret fails, do not reset again: read it with
+  td apps view <ref> --include-secrets
+
+Examples:
+  td apps reset-secret id:9909
+  td apps reset-secret id:9909 --yes
+  td apps reset-secret "Todoist for VS Code" --yes --json`,
+        )
+        .action((ref, options) => {
+            if (!ref) {
+                failWithUsage(resetSecretCmd)
+                return
+            }
+            return resetAppSecret(ref, options)
         })
 
     const deleteCmd = apps

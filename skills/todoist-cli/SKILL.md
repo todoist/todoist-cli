@@ -392,6 +392,8 @@ td apps update id:9909 --name "My App" --description "New blurb" --set-webhook-u
 td apps update id:9909 --client-type public
 td apps update id:9909 --icon ./icon.png
 td apps update id:9909 --icon ./icon-60.png --icon-size small
+td apps reset-secret id:9909 --yes
+td apps reset-secret id:9909 --yes --json
 td apps delete id:9909 --yes
 ```
 
@@ -414,6 +416,8 @@ All `td apps update` flags combine in a single invocation, which performs up to 
 `--icon <path>` uploads a local PNG or JPEG (`.png`, `.jpg`, `.jpeg`) as the app's icon. Apps have three independent icon slots, picked with `--icon-size`: `small` (60×60, max 8KB), `medium` (300×300, max 300KB — the default when `--icon-size` is omitted, and the one the web app console sets), and `large` (600×600, max 500KB). Uploading to one slot does not fill the others. The extension and file size are checked before any API call (`INVALID_TYPE` / `FILE_TOO_LARGE`; a missing file is `FILE_NOT_FOUND`); exact pixel dimensions are checked by the server, which rejects a mismatch. `--icon-size` without `--icon` is `INVALID_OPTIONS`. An upload is never treated as a no-op, since the new file can't be compared with the stored icon. The resulting URLs appear as `iconSm` / `iconMd` / `iconLg` in `td apps view --json`.
 
 `--dry-run` prints one combined preview of every pending change. `--json` output shape depends on which surfaces the flags touched: a lone app change (record fields and/or `--icon`) emits the bare app object, a lone webhook change emits the bare webhook object, and touching both emits `{ "app": <app>, "webhook": <webhook> }`.
+
+`td apps reset-secret <ref>` replaces an app's OAuth client secret (resolved by name, `id:N`, or raw numeric id) and prints the new one. **This is destructive: the current secret stops working immediately, with no overlap period, so every service that uses it breaks until it is updated with the new secret. Always confirm with the user that they are sure before running with `--yes`.** Only the app's owner can reset it. Without `--yes` the command prints a `Would reset the client secret for: …` preview with that warning and resets nothing; `--dry-run` prints the standard dry-run preview. After the reset (`resetAppClientSecret`) it reads the new secret back (`getAppSecrets`) and prints the client id and new client secret. `--json` emits the app (the same fields as `td apps update --json`) plus a top-level `clientSecret`, the key `td apps view --json --include-secrets` uses; `--json` without `--yes` or `--dry-run` throws `CONFIRMATION_REQUIRED`. `--quiet` prints only the new secret, for scripting. If the reset succeeds but reading the new secret fails, the command exits with `PARTIAL_FAILURE`: the secret has already been rotated, so **do not run it again** (that would rotate it a second time); read the new value with `td apps view <ref> --include-secrets`.
 
 `td apps delete <ref>` deletes a registered app (resolved by name, `id:N`, or raw numeric id). **This is destructive and irreversible: deleting an app immediately breaks it for everyone who uses it — any user who authorized the integration loses access, and the app cannot be restored. Always confirm with the user that they are sure before running with `--yes`.** It requires `--yes` to actually delete; without it the command prints a `Would delete app: …` preview and makes no API call (same convention as `td folder delete` / `td workspace delete`). `--dry-run` prints the standard dry-run preview.
 
