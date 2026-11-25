@@ -3,7 +3,7 @@ import chalk from 'chalk'
 import { getApi } from '../../lib/api/core.js'
 import { CliError } from '../../lib/errors.js'
 import { isQuiet } from '../../lib/global-args.js'
-import { printDryRun, processJsonItem } from '../../lib/output.js'
+import { formatJson, printDryRun, processJsonItem } from '../../lib/output.js'
 import { resolveAppRef } from '../../lib/refs.js'
 
 export interface ResetAppSecretOptions {
@@ -12,16 +12,19 @@ export interface ResetAppSecretOptions {
     json?: boolean
 }
 
+const COMMAND = 'td apps reset-secret'
+
 const OLD_SECRET_WARNING =
     'The current client secret stops working immediately: every service using it breaks until it is updated with the new one.'
 
 export async function resetAppSecret(ref: string, options: ResetAppSecretOptions): Promise<void> {
-    // Under --json there is no preview to print, so a missing --yes is an
-    // error rather than a silent no-op.
-    if (options.json && !options.yes && !options.dryRun) {
+    // --json and --quiet are for scripts, which would capture a plain-text
+    // preview as if it were the result (or, under --quiet, the new secret).
+    // A missing --yes is an error there rather than a silent no-op.
+    if ((options.json || isQuiet()) && !options.yes && !options.dryRun) {
         throw new CliError(
             'CONFIRMATION_REQUIRED',
-            'Pass --yes to execute td apps reset-secret, or --dry-run to preview it.',
+            `Pass --yes to execute ${COMMAND}, or --dry-run to preview it.`,
             [OLD_SECRET_WARNING],
         )
     }
@@ -30,6 +33,19 @@ export async function resetAppSecret(ref: string, options: ResetAppSecretOptions
     const app = await resolveAppRef(api, ref)
 
     if (options.dryRun) {
+        if (options.json) {
+            console.log(
+                formatJson({
+                    status: 'preview',
+                    command: COMMAND,
+                    messages: [
+                        `Would reset the client secret for: ${app.displayName} (id:${app.id})`,
+                        OLD_SECRET_WARNING,
+                    ],
+                }),
+            )
+            return
+        }
         printDryRun('reset client secret', {
             App: app.displayName,
             ID: app.id,

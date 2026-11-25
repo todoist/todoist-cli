@@ -2134,7 +2134,8 @@ describe('apps reset-secret', () => {
 
     it('--dry-run previews with the warning and sends nothing, even with --yes', async () => {
         const consoleSpy = captureConsole()
-        mockApi.getApp.mockResolvedValue(APP_A_DETAIL)
+        // Primed so a dry run that leaked into the real path would print the secret.
+        primeReset()
 
         await run('id:9909', '--dry-run', '--yes')
 
@@ -2171,6 +2172,25 @@ describe('apps reset-secret', () => {
         })
     })
 
+    it('--json --dry-run prints a JSON preview and sends nothing', async () => {
+        const consoleSpy = captureConsole()
+        primeReset()
+
+        await run('id:9909', '--json', '--dry-run')
+
+        expect(mockApi.resetAppClientSecret).not.toHaveBeenCalled()
+        expect(mockApi.getAppSecrets).not.toHaveBeenCalled()
+        expect(consoleSpy).toHaveBeenCalledTimes(1)
+        expect(JSON.parse(consoleSpy.mock.calls[0][0])).toEqual({
+            status: 'preview',
+            command: 'td apps reset-secret',
+            messages: [
+                'Would reset the client secret for: Todoist for VS Code (id:9909)',
+                'The current client secret stops working immediately: every service using it breaks until it is updated with the new one.',
+            ],
+        })
+    })
+
     it('--json without --yes throws CONFIRMATION_REQUIRED before any API call', async () => {
         await expect(run('id:9909', '--json')).rejects.toMatchObject({
             code: 'CONFIRMATION_REQUIRED',
@@ -2190,6 +2210,25 @@ describe('apps reset-secret', () => {
             await run('id:9909', '--yes')
 
             expect(consoleSpy.mock.calls.map((c) => c[0])).toEqual([NEW_SECRET])
+        } finally {
+            process.argv = originalArgv
+        }
+    })
+
+    it('--quiet without --yes throws CONFIRMATION_REQUIRED before any API call', async () => {
+        const originalArgv = process.argv
+        process.argv = ['node', 'td', '--quiet', 'apps', 'reset-secret', 'id:9909']
+        resetGlobalArgs()
+        try {
+            const consoleSpy = captureConsole()
+            primeReset()
+
+            await expect(run('id:9909')).rejects.toMatchObject({
+                code: 'CONFIRMATION_REQUIRED',
+            })
+            expect(mockApi.getApp).not.toHaveBeenCalled()
+            expect(mockApi.resetAppClientSecret).not.toHaveBeenCalled()
+            expect(consoleSpy).not.toHaveBeenCalled()
         } finally {
             process.argv = originalArgv
         }

@@ -37,9 +37,11 @@ Examples:
   td apps reset-secret id:9909 --yes --json
   td apps delete id:9909 --yes
 
-Sensitive values (client id, client secret, verification token, test token,
-distribution token) are hidden by default. Pass --include-secrets to fetch
-and reveal them — they are not pulled onto your machine unless you do.
+In td apps view, sensitive values (client id, client secret, verification
+token, test token, distribution token) are hidden by default. Pass
+--include-secrets to fetch and reveal them; they are not pulled onto your
+machine unless you do. td apps reset-secret is the exception: it always
+prints the new client secret it creates.
 
 Requires authenticating with the dev:app_console scope:
   td auth login --additional-scopes=app-management`,
