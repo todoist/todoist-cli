@@ -172,6 +172,41 @@ describe('lib/auth', () => {
             }
         })
 
+        // `loadStoredToken` reads through cli-core's token store, which builds
+        // its keyring slots internally rather than through the mocked
+        // `createSecureStore` export. Back `@napi-rs/keyring` with the same
+        // fake so those reads hit `keyring` too, never the real OS keychain.
+        vi.doMock('@napi-rs/keyring', () => ({
+            AsyncEntry: class {
+                constructor(
+                    service: string,
+                    private readonly account: string,
+                ) {
+                    keyring.constructed.push({ service, account })
+                }
+                async getPassword() {
+                    if (keyring.getError) throw keyring.getError
+                    const e = entryFor(keyring, this.account)
+                    e.getCalls += 1
+                    return e.token
+                }
+                async setPassword(password: string) {
+                    if (keyring.setError) throw keyring.setError
+                    const e = entryFor(keyring, this.account)
+                    e.token = password
+                    e.setCalls.push(password)
+                }
+                async deleteCredential() {
+                    if (keyring.deleteError) throw keyring.deleteError
+                    const e = entryFor(keyring, this.account)
+                    const had = e.token !== null
+                    e.token = null
+                    e.deleteCalls += 1
+                    return had
+                }
+            },
+        }))
+
         errorSpy = captureConsole('error')
     })
 
@@ -216,6 +251,24 @@ describe('lib/auth', () => {
             token: 'stored-token',
             source: 'secure-store',
         })
+    })
+
+    it('reads the access token from a keychain item that holds both tokens', async () => {
+        // cli-core 2.0.3+ stores the access and refresh tokens together in the
+        // `user-<id>` item. The bearer must be the access token alone.
+        setConfig({
+            config_version: 2,
+            users: [{ id: '111', email: 'a@b.c', has_refresh_token: true }],
+        })
+        entryFor(keyring, 'user-111').token = JSON.stringify({
+            v: 1,
+            accessToken: 'access-111',
+            refreshToken: 'refresh-111',
+        })
+
+        const { getApiToken } = await import('./auth.js')
+
+        await expect(getApiToken()).resolves.toBe('access-111')
     })
 
     it('resolves the configured default user when multiple are stored', async () => {
@@ -384,7 +437,7 @@ describe('lib/auth', () => {
 
     // --- probe / metadata under keyring failure -------------------------------
 
-    it('probeApiToken surfaces SecureStoreUnavailableError instead of NoTokenError', async () => {
+    it('probeApiToken surfaces a keyring read error instead of NoTokenError', async () => {
         // Stored v2 user, no plaintext fallback; keyring is offline. The
         // diagnostic surface needs to tell "credentials missing" apart from
         // "credential manager broken".
@@ -394,10 +447,12 @@ describe('lib/auth', () => {
         })
         keyring.getError = new Error('keychain locked')
 
-        const { probeApiToken } = await import('./auth.js')
-        const { SecureStoreUnavailableError } = await import('@todoist/cli-core/auth')
+        const { isKeyringReadError, NoTokenError, probeApiToken } = await import('./auth.js')
 
-        await expect(probeApiToken()).rejects.toBeInstanceOf(SecureStoreUnavailableError)
+        const error = await probeApiToken().catch((e: unknown) => e)
+        expect(error).not.toBeInstanceOf(NoTokenError)
+        expect(isKeyringReadError(error)).toBe(true)
+        expect(error).toMatchObject({ code: 'AUTH_STORE_READ_FAILED' })
     })
 
     it('getAuthMetadata degrades to unknown when the keyring is offline', async () => {

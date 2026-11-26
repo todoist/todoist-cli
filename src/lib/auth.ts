@@ -1,4 +1,4 @@
-import { createSecureStore, SecureStoreUnavailableError } from '@todoist/cli-core/auth'
+import { SecureStoreUnavailableError } from '@todoist/cli-core/auth'
 export type { TokenStorageLocation, TokenStorageResult } from '@todoist/cli-core/auth'
 export {
     AUTH_FLAG_ORDER,
@@ -13,14 +13,9 @@ export {
     type UpdateChannel,
 } from './config.js'
 
-import {
-    accountForUser,
-    getRequestedOrEnvUserRef,
-    SERVICE_NAME,
-    TOKEN_ENV_VAR,
-} from './auth-store.js'
+import { createTodoistTokenStore, getRequestedOrEnvUserRef, TOKEN_ENV_VAR } from './auth-store.js'
 import { type AuthFlag, type AuthMode, readConfig, type StoredUser } from './config.js'
-import { CliError } from './errors.js'
+import { BaseCliError, CliError } from './errors.js'
 import {
     findUserByRef,
     getEffectiveDefaultUser,
@@ -132,7 +127,7 @@ export async function getApiToken(): Promise<string> {
 
 /**
  * Like `resolveActiveUser` but bundles the rendering metadata `td doctor` /
- * `td config view` want. Lets `SecureStoreUnavailableError` propagate so the
+ * `td config view` want. Lets keyring read errors (`isKeyringReadError`) propagate so the
  * diagnostic surfaces can distinguish "missing token" from "broken keyring".
  */
 export async function probeApiToken(): Promise<{ token: string; metadata: AuthMetadata }> {
@@ -146,7 +141,7 @@ export async function getAuthMetadata(): Promise<AuthMetadata> {
     } catch (error) {
         // Permission/scope callers need a sensible default rather than a hard
         // failure when credentials are missing or the keyring is offline.
-        if (error instanceof NoTokenError || error instanceof SecureStoreUnavailableError) {
+        if (error instanceof NoTokenError || isKeyringReadError(error)) {
             return { authMode: 'unknown', source: 'secure-store' }
         }
         throw error
@@ -226,14 +221,26 @@ async function loadStoredToken(
     if (plaintext) {
         return { token: plaintext, source: 'config-file' }
     }
-    // Let `SecureStoreUnavailableError` propagate — a stored v2 user with the
-    // keyring offline is not the same situation as no credentials at all.
-    const stored = await createSecureStore({
-        serviceName: SERVICE_NAME,
-        account: accountForUser(user.id),
-    }).getSecret()
-    if (stored?.trim()) return { token: stored.trim(), source: 'secure-store' }
+    // Read through cli-core's token store, never the keyring slot directly:
+    // the slot's format belongs to cli-core (it holds both tokens in one
+    // item). Keyring failures propagate as `AUTH_STORE_READ_FAILED` — a stored
+    // v2 user with a broken keyring is not the same situation as no
+    // credentials at all. See `isKeyringReadError`.
+    const active = await createTodoistTokenStore().active(user.id)
+    if (active) return { token: active.token, source: 'secure-store' }
     throw new NoTokenError()
+}
+
+/**
+ * The stored user exists but the keyring could not return its token: the
+ * credential manager is offline, or the entry is missing or unreadable.
+ * Diagnostic surfaces report this apart from "no credentials at all".
+ */
+export function isKeyringReadError(error: unknown): boolean {
+    return (
+        error instanceof SecureStoreUnavailableError ||
+        (error instanceof BaseCliError && error.code === 'AUTH_STORE_READ_FAILED')
+    )
 }
 
 function resolvedToMetadata(resolved: ResolvedUser): AuthMetadata {

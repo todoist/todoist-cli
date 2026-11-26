@@ -144,6 +144,24 @@ describe('config view', () => {
         expect(output).toContain('stable')
     })
 
+    it('reports a keyring read failure from the token store as unavailable', async () => {
+        presentConfig({ auth_mode: 'read-write', update_channel: 'stable' })
+        mockProbeApiToken.mockRejectedValue(
+            new CliError(
+                'AUTH_STORE_READ_FAILED',
+                'system credential manager returned no credential for the stored account',
+            ),
+        )
+        const consoleSpy = captureConsole()
+
+        await createProgram().parseAsync(['node', 'td', 'config', 'view'])
+
+        const output = consoleSpy.mock.calls.map((c) => c[0]).join('\n')
+        expect(output).toContain('system credential manager returned no credential')
+        expect(output).not.toContain('unavailable (')
+        expect(output).toContain('stable')
+    })
+
     it('--json emits the raw config with api_token masked', async () => {
         presentConfig()
         const consoleSpy = captureConsole()

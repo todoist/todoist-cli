@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import {
     type AuthMetadata,
     listStoredUsers,
+    isKeyringReadError,
     NoTokenError,
     probeApiToken,
     type StoredUser,
@@ -47,10 +48,15 @@ async function probeTokenPresence(): Promise<TokenStatus> {
     } catch (error) {
         if (error instanceof NoTokenError) return { state: 'missing' }
         if (error instanceof NoUserSelectedError) return { state: 'ambiguous' }
-        if (error instanceof SecureStoreUnavailableError) {
+        if (isKeyringReadError(error)) {
+            const { message } = error as Error
             return {
                 state: 'unavailable',
-                reason: `${SECURE_STORE_DESCRIPTION} unavailable (${error.message})`,
+                // cli-core's read error already names the credential manager.
+                reason:
+                    error instanceof SecureStoreUnavailableError
+                        ? `${SECURE_STORE_DESCRIPTION} unavailable (${message})`
+                        : message,
             }
         }
         throw error
