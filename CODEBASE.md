@@ -334,14 +334,17 @@ file plus a Todoist-specific `validateToken` (`auth-provider.ts`).
 
 Read path (`auth.ts` — `resolveActiveUser` / `getApiToken` / `probeApiToken`):
 env `TODOIST_API_TOKEN` first, then a config-derived target user, then either
-`StoredUser.api_token` (plaintext keyring-offline fallback) or cli-core's
-`createSecureStore` for the keyring slot.
+`StoredUser.api_token` (plaintext keyring-offline fallback) or
+`createTodoistTokenStore().active()`. Never read a keyring slot directly: its
+format belongs to cli-core, which keeps the access and refresh tokens together
+in one `user-<id>` item (and still reads the older layout with a separate
+refresh slot). Keyring read failures surface as `AUTH_STORE_READ_FAILED`;
+`isKeyringReadError` lets diagnostics tell them apart from "no token".
 
 Expiring tokens: `td auth login` signs in as the client ID metadata document
 the Todoist backend serves at `OAUTH_CLIENT_ID`, whose access tokens expire
 after an hour. A user record with `access_token_expires_at` holds one, with its
-refresh token in the keyring slot `user-<id>/refresh` (or `refresh_token` in
-plaintext) and the client it was issued to in `oauth_client_id`, which a
+refresh token in the same keyring item (or `refresh_token` in plaintext) and the client it was issued to in `oauth_client_id`, which a
 refresh sends. Records without it (accounts that signed in through the
 registered Todoist CLI app, or `td auth token`) hold tokens that never expire
 and are read exactly as above. `auth.ts` refreshes a

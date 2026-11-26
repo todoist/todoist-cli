@@ -120,62 +120,10 @@ describe('lib/auth', () => {
             }
         })
 
-        // Mock cli-core's `createSecureStore` directly. Inlining cli-core via
-        // `server.deps.inline` is not sufficient on Linux + npm-linked cli-core:
-        // the dynamic `import('@napi-rs/keyring')` inside cli-core resolves
-        // against the symlink target and bypasses vitest's mock. Mocking
-        // `@todoist/cli-core/auth` is the reliable boundary — it preserves the
-        // typed `SecureStoreUnavailableError` re-export so the actual class
-        // identity carries across the test/import boundary.
-        vi.doMock('@todoist/cli-core/auth', async (importOriginal) => {
-            const actual = await importOriginal<typeof import('@todoist/cli-core/auth')>()
-            const { SecureStoreUnavailableError } = actual
-            return {
-                ...actual,
-                createSecureStore: ({
-                    serviceName,
-                    account,
-                }: {
-                    serviceName: string
-                    account: string
-                }) => {
-                    keyring.constructed.push({ service: serviceName, account })
-                    return {
-                        async getSecret() {
-                            if (keyring.getError) {
-                                throw new SecureStoreUnavailableError(keyring.getError.message)
-                            }
-                            const e = entryFor(keyring, account)
-                            e.getCalls += 1
-                            return e.token
-                        },
-                        async setSecret(password: string) {
-                            if (keyring.setError) {
-                                throw new SecureStoreUnavailableError(keyring.setError.message)
-                            }
-                            const e = entryFor(keyring, account)
-                            e.token = password
-                            e.setCalls.push(password)
-                        },
-                        async deleteSecret() {
-                            if (keyring.deleteError) {
-                                throw new SecureStoreUnavailableError(keyring.deleteError.message)
-                            }
-                            const e = entryFor(keyring, account)
-                            const had = e.token !== null
-                            e.token = null
-                            e.deleteCalls += 1
-                            return had
-                        },
-                    }
-                },
-            }
-        })
-
-        // `loadStoredToken` reads through cli-core's token store, which builds
-        // its keyring slots internally rather than through the mocked
-        // `createSecureStore` export. Back `@napi-rs/keyring` with the same
-        // fake so those reads hit `keyring` too, never the real OS keychain.
+        // Fake the native keyring. cli-core builds its keyring slots
+        // internally, so mocking its exported `createSecureStore` would not
+        // reach the token store; `@napi-rs/keyring` is the boundary that
+        // keeps every read on `keyring`, never the real OS keychain.
         vi.doMock('@napi-rs/keyring', () => ({
             AsyncEntry: class {
                 constructor(
