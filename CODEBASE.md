@@ -258,7 +258,8 @@ New subcommand? Copy a sibling in the target group, wire it in that group's
   `parseLocalDate` (strict ISO, bare = local time) and `parseDurationMs` (`30m`/`2h`/`1d`)
   for the `status set` expiry flags; `parseDateOption` checks `YYYY-MM-DD` `--since`/`--until`
   values. Days are the account's (see AGENTS.md): `formatDateInTimezone(new Date(), timezone)`
-  is the account's today, `dueDateDay` the day a `due.date` falls on, `addDays` calendar
+  is the account's today, `dueDateDay` the day a `due.date` falls on, `startOfDayInTimezone`
+  the instant an account day begins (for `--since`/`--until` style ranges), `addDays` calendar
   arithmetic, `formatDateHeader` the Overdue/Today/Tomorrow heading and `formatDateTime` a
   readable date and time, all given the zone from `getAccountTimezone()`
 - **`permissions.ts`** — collaborator permission parsing

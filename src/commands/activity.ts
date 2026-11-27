@@ -136,30 +136,32 @@ function toApiInstant(instant: Date): string {
     return instant.toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
 
-/**
- * The instants `--since` and `--until` cover: whole days in the account's time zone, from the
- * start of the `--since` day to the end of the `--until` day. The API reads a bare date as UTC
- * midnight and leaves out `date_to` itself, so the days are sent as instants.
- */
-async function resolveDateRange(
-    since: string | undefined,
-    until: string | undefined,
-): Promise<{ dateFrom?: string; dateTo?: string }> {
+/** Checks `--since` and `--until` are dates, in order, before any request is made. */
+function checkDateFlags(since: string | undefined, until: string | undefined): void {
     if (since) parseDateOption(since, '--since')
     if (until) parseDateOption(until, '--until')
-    if (!since && !until) return {}
     if (since && until && until < since) {
         throw new CliError('INVALID_DATE_RANGE', '--until must not be before --since', [
             `Received --since ${since} --until ${until}`,
         ])
     }
+}
 
-    const timezone = await getAccountTimezone()
+/**
+ * The instants `--since` and `--until` cover: whole days in the account's `timezone`, from the
+ * start of the `--since` day to the end of the `--until` day. The API reads a bare date as UTC
+ * midnight and leaves out `date_to` itself, so the days are sent as instants.
+ */
+function dateRangeIn(
+    since: string | undefined,
+    until: string | undefined,
+    timezone: string | undefined,
+): { dateFrom?: string; dateTo?: string } {
     const from = since ? startOfDayInTimezone(since, timezone) : undefined
     const to = until ? startOfDayInTimezone(addDays(until, 1), timezone) : undefined
-    if (from && to && to.getTime() - from.getTime() > MAX_RANGE_DAYS * DAY_MS) {
+    if (from && to && until && to.getTime() - from.getTime() > MAX_RANGE_DAYS * DAY_MS) {
         throw new CliError('INVALID_DATE_RANGE', 'Activity date ranges cannot exceed 365 days', [
-            `Split the range, for example --since ${addDays(until as string, -363)} --until ${until} for the most recent part.`,
+            `Split the range, for example --since ${addDays(until, -363)} --until ${until} for the most recent part.`,
         ])
     }
     return {
@@ -196,7 +198,11 @@ export function registerActivityCommand(program: Command): void {
         .action(async (options: ActivityOptions) => {
             const outputMode = resolveOutputMode(options)
 
-            const { dateFrom, dateTo } = await resolveDateRange(options.since, options.until)
+            checkDateFlags(options.since, options.until)
+            // Days are the account's, so look its time zone up alongside the other lookups.
+            // It never rejects: a failed lookup falls back to the machine's zone.
+            const timezone =
+                options.since || options.until ? getAccountTimezone() : Promise.resolve(undefined)
 
             const api = await getApi()
 
@@ -215,6 +221,8 @@ export function registerActivityCommand(program: Command): void {
                     initiatorId = options.by
                 }
             }
+
+            const { dateFrom, dateTo } = dateRangeIn(options.since, options.until, await timezone)
 
             const targetLimit = options.limit ? parseInt(options.limit, 10) : ACTIVITY_LIMIT
 

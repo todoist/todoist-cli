@@ -187,6 +187,28 @@ describe('activity command', () => {
             expect(untilOnly).toMatchObject({ dateFrom: undefined, dateTo: '2025-01-11T00:00:00Z' })
         })
 
+        it('looks the time zone up alongside the other lookups', async () => {
+            let deliverTimezone: (timezone: string) => void = () => {}
+            vi.mocked(getAccountTimezone).mockReturnValueOnce(
+                new Promise((resolve) => {
+                    deliverTimezone = resolve
+                }),
+            )
+            mockGetCurrentUserId.mockResolvedValue('user-123')
+
+            const run = runActivity('--since', '2025-01-01', '--by', 'me')
+            await vi.waitFor(() => expect(mockGetCurrentUserId).toHaveBeenCalled())
+            deliverTimezone('UTC')
+            await run
+
+            expect(mockApi.getActivityLogs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    dateFrom: '2025-01-01T00:00:00Z',
+                    initiatorId: 'user-123',
+                }),
+            )
+        })
+
         it('does not look the time zone up without them', async () => {
             await runActivity()
 
