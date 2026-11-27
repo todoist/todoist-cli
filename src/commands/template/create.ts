@@ -20,7 +20,7 @@ export async function createFromTemplate(options: CreateFromTemplateOptions): Pr
         throw new CliError('MISSING_NAME', 'Project name is required (--name)')
     }
     if (!options.file) {
-        throw new CliError('MISSING_FILE', 'Template file path is required (--file)')
+        throw new CliError('MISSING_FILE', 'CSV file path is required (--file)')
     }
 
     const {
@@ -30,7 +30,7 @@ export async function createFromTemplate(options: CreateFromTemplateOptions): Pr
     } = await openLocalFileAsBlob({ file: options.file, fileName: options.fileName })
 
     if (options.dryRun) {
-        printDryRun('create project from template', {
+        printDryRun('create project from CSV', {
             Name: options.name,
             File: filePath,
             'File name': options.fileName,

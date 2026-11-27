@@ -73,6 +73,16 @@ describe('template', () => {
         })
     })
 
+    it('points td template --help to the project commands that use a template', () => {
+        const template = createProgram().commands.find((c) => c.name() === 'template')!
+        let help = ''
+        template.configureOutput({ writeOut: (str) => (help += str) })
+        template.outputHelp()
+
+        expect(help).toContain('td project create --from-template <id>')
+        expect(help).toContain('td project import <project> --from-template <id>')
+    })
+
     describe('export-url', () => {
         it('displays file name and URL', async () => {
             const program = createProgram()
@@ -151,6 +161,27 @@ describe('template', () => {
             expect(await (createArg.file as Blob).text()).toBe('template content')
             expect(consoleSpy).toHaveBeenCalledWith(
                 expect.stringContaining('Created project: My Project'),
+            )
+        })
+
+        it('warns that --file moved to td project create --from-csv', async () => {
+            const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+            await createProgram().parseAsync([
+                'node',
+                'td',
+                'template',
+                'create',
+                '--name',
+                'My Project',
+                '--file',
+                '/tmp/template.csv',
+            ])
+
+            expect(mockApi.addProjectFromCsv).toHaveBeenCalled()
+            expect(stderrSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Warning:'),
+                expect.stringContaining('Use `td project create --from-csv` instead.'),
             )
         })
 

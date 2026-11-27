@@ -191,6 +191,9 @@ td project create --name "New Project" --color blue
 td project create --name "Trips" --icon airplane          # icon names are listed in --help
 td project create --name "New Project" --description "Quarterly OKRs"
 td project create --name "Imported" --stdin              # read the description from stdin
+td project create --name "Q2 plan" --from-csv plan.csv --workspace "Acme"
+td project create --from-template product-launch        # named after the template unless --name is given
+td project create --from-template product-launch --workspace "Acme" --folder "Marketing" --locale fr
 td project update "Roadmap" --description "Updated scope"
 td project update "Roadmap" --favorite
 td project update "Roadmap" --view-style table          # list, board, calendar, or table
@@ -359,9 +362,9 @@ td hc view https://www.todoist.com/help/articles/introduction-to-filters-V98wIH
 ### Templates
 \`\`\`bash
 td template export-url "Roadmap"
-td template create --name "New Project" --file template.csv --workspace "Acme"
-td template create --name "New Project" --file template.csv --file-name "Q2 plan.csv"
 \`\`\`
+
+Commands that read or change a project live under \`td project\`: \`export\` (CSV), \`import --from-csv\`/\`--from-template\` into an existing project, and \`create --from-csv\`/\`--from-template\` for a new one. Templates are gallery slugs (\`product-launch\`) or saved \`UT_\` IDs. With a \`--from-…\` option, \`td project create\` only takes \`--name\` (required with \`--from-csv\`), \`--workspace\`, \`--file-name\` (CSV only), and \`--locale\` and \`--folder\` (template only; \`--folder\` needs \`--workspace\`); set the color, parent and the rest afterwards with \`td project update\`. The old \`td template export-file\`, \`import-file\`, \`import-id\` and \`create --file\` still work for one release, with a deprecation warning on stderr.
 
 ### Backups
 \`\`\`bash
