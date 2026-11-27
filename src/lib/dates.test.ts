@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
     addDays,
     dueDateDay,
@@ -249,6 +249,16 @@ describe('formatDateInTimezone', () => {
     it("uses the machine's time zone for a name it does not know", () => {
         // The test run pins the machine's time zone to UTC.
         expect(formatDateInTimezone(instant, 'Mars/Olympus_Mons')).toBe('2026-01-09')
+    })
+
+    it('builds one formatter per time zone however many dates it formats', () => {
+        // A zone no other test uses, so its formatter is built here.
+        const construct = vi.spyOn(Intl, 'DateTimeFormat')
+        for (const day of [9, 10, 11]) {
+            formatDateInTimezone(new Date(Date.UTC(2026, 0, day, 12)), 'Pacific/Chatham')
+        }
+        expect(construct).toHaveBeenCalledTimes(1)
+        construct.mockRestore()
     })
 })
 

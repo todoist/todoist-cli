@@ -1,3 +1,6 @@
+import { addDays as addCalendarDays } from 'date-fns/addDays'
+import { format } from 'date-fns/format'
+import { parseISO } from 'date-fns/parseISO'
 import { CliError } from './errors.js'
 
 const TODOIST_FIXED_OFFSET = /^GMT ([+-])(\d{1,2}):(\d{2})$/
@@ -14,20 +17,44 @@ export function toIntlTimeZone(timeZone: string): string {
     return `${sign}${hours.padStart(2, '0')}:${minutes}`
 }
 
+const FORMAT_OPTIONS = {
+    day: { year: 'numeric', month: '2-digit', day: '2-digit' },
+    dateTime: {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    },
+} as const satisfies Record<string, Intl.DateTimeFormatOptions>
+
+// Formatters by kind and time zone, built once each: commands format a day for every task they
+// list. `null` marks a name `Intl` rejected. The machine's own zone is not cached, since its
+// formatter would go stale if the process's `TZ` changed.
+const formatters = new Map<string, Intl.DateTimeFormat | null>()
+
 function formatterIn(
     timeZone: string | undefined,
-    options: Intl.DateTimeFormatOptions,
+    kind: keyof typeof FORMAT_OPTIONS,
 ): Intl.DateTimeFormat {
+    const options = FORMAT_OPTIONS[kind]
     if (timeZone) {
-        try {
-            return new Intl.DateTimeFormat('en-US', {
-                ...options,
-                timeZone: toIntlTimeZone(timeZone),
-            })
-        } catch (error) {
-            // A name `Intl` does not know falls back to the machine's time zone.
-            if (!(error instanceof RangeError)) throw error
+        const key = `${kind} ${timeZone}`
+        let formatter = formatters.get(key)
+        if (formatter === undefined) {
+            try {
+                formatter = new Intl.DateTimeFormat('en-US', {
+                    ...options,
+                    timeZone: toIntlTimeZone(timeZone),
+                })
+            } catch (error) {
+                // A name `Intl` does not know falls back to the machine's time zone.
+                if (!(error instanceof RangeError)) throw error
+                formatter = null
+            }
+            formatters.set(key, formatter)
         }
+        if (formatter) return formatter
     }
     return new Intl.DateTimeFormat('en-US', options)
 }
@@ -38,11 +65,7 @@ function formatterIn(
  * know, the machine's is used.
  */
 export function formatDateInTimezone(date: Date, timeZone?: string): string {
-    const parts = formatterIn(timeZone, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    }).formatToParts(date)
+    const parts = formatterIn(timeZone, 'day').formatToParts(date)
     const part = (type: Intl.DateTimeFormatPartTypes) =>
         parts.find((p) => p.type === type)?.value ?? ''
     return `${part('year')}-${part('month')}-${part('day')}`
@@ -98,13 +121,7 @@ export function dueDateDay(dueDate: string, timeZone?: string): string {
 
 /** The `YYYY-MM-DD` day `days` calendar days after `day`, or before it when `days` is negative. */
 export function addDays(day: string, days: number): string {
-    const [year, month, date] = day.split('-').map(Number)
-    const result = new Date(Date.UTC(year, month - 1, date + days))
-    return [
-        String(result.getUTCFullYear()).padStart(4, '0'),
-        String(result.getUTCMonth() + 1).padStart(2, '0'),
-        String(result.getUTCDate()).padStart(2, '0'),
-    ].join('-')
+    return format(addCalendarDays(parseISO(day), days), 'yyyy-MM-dd')
 }
 
 /**
@@ -190,11 +207,5 @@ export function parseLocalDate(value: string): Date | null {
  * machine's is used.
  */
 export function formatDateTime(date: Date, timeZone?: string): string {
-    return formatterIn(timeZone, {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-    }).format(date)
+    return formatterIn(timeZone, 'dateTime').format(date)
 }
