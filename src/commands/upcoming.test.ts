@@ -477,6 +477,47 @@ describe('upcoming command', () => {
             ])
         })
 
+        it("orders fixed and floating times by the account's clock", async () => {
+            // For an account in Tokyo, 23:00 UTC on the 24th is 8 AM on the 25th: after a
+            // floating 7 AM on the 25th, and after the 25th's all-day task. The machine is on UTC.
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('Asia/Tokyo')
+            mockApi.getTasksByFilter.mockResolvedValue({
+                results: [
+                    {
+                        id: 'task-1',
+                        content: 'Fixed 8 AM task',
+                        projectId: 'proj-1',
+                        priority: 1,
+                        due: { date: '2026-11-24T23:00:00Z' },
+                    },
+                    {
+                        id: 'task-2',
+                        content: 'Floating 7 AM task',
+                        projectId: 'proj-1',
+                        priority: 1,
+                        due: { date: '2026-11-25T07:00:00' },
+                    },
+                    {
+                        id: 'task-3',
+                        content: 'All-day task',
+                        projectId: 'proj-1',
+                        priority: 1,
+                        due: { date: '2026-11-25' },
+                    },
+                ],
+                nextCursor: null,
+            })
+
+            await createProgram().parseAsync(['node', 'td', 'upcoming', '--json'])
+
+            const parsed = JSON.parse(String(consoleSpy.mock.calls[0][0]))
+            expect(parsed.results.map((task: { id: string }) => task.id)).toEqual([
+                'task-3',
+                'task-2',
+                'task-1',
+            ])
+        })
+
         it('uses the same order for --json', async () => {
             await createProgram().parseAsync(['node', 'td', 'upcoming', '--json'])
 
