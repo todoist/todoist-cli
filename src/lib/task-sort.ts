@@ -321,3 +321,13 @@ export function sortTasks(tasks: Task[], sort: TaskSort, context: TaskOrderConte
         } satisfies TaskSortContext,
     )
 }
+
+/**
+ * Sort tasks the way the Todoist apps sort Today and Upcoming: by day, oldest first, all-day
+ * tasks before timed ones, then by priority, deadline, the order set by hand and date added.
+ * That order uses no project data. `timezone` is the account's, for placing fixed due times.
+ * Like `sortTasks`, it orders only the tasks it is given, so one page of a paginated list.
+ */
+export function sortForDateView(tasks: Task[], timezone?: string): Task[] {
+    return sortTasks(tasks, DEFAULT_TASK_SORT, { timezone, dateDriven: true })
+}

@@ -130,7 +130,7 @@ td completed list --search "meeting notes"
 td activity --type task --event completed
 \`\`\`
 
-\`td today\` and \`td upcoming\` date tasks by the account's time zone and list them the way the Todoist apps' Today and Upcoming do: by day, oldest first, all-day tasks before timed ones, then priority, deadline and the order set by hand. \`--json\` and \`--ndjson\` keep the same order.
+\`td today\` and \`td upcoming\` date tasks by the account's time zone and list them the way the Todoist apps' Today and Upcoming do: by day, oldest first, all-day tasks before timed ones, then priority, deadline and the order set by hand. \`--json\` and \`--ndjson\` keep the same order. Each page is sorted on its own, so pages fetched with \`--cursor\` don't join into one order: use \`--all\` when there are more tasks than the limit.
 
 ### Tasks
 \`\`\`bash

@@ -15,7 +15,7 @@ import {
 } from '../lib/output.js'
 import { LIMITS, paginate } from '../lib/pagination.js'
 import { fetchProjects, filterByWorkspaceOrPersonal } from '../lib/task-list.js'
-import { DEFAULT_TASK_SORT, sortTasks } from '../lib/task-sort.js'
+import { sortForDateView } from '../lib/task-sort.js'
 
 interface UpcomingOptions extends PaginatedViewOptions {
     anyAssignee?: boolean
@@ -71,12 +71,7 @@ export async function showUpcoming(
         prefetchedProjects: projects,
     })
 
-    // List tasks the way the Todoist apps list Today and Upcoming: by day, oldest first, all-day
-    // tasks before timed ones, then by priority, deadline and the order set by hand.
-    const relevantTasks = sortTasks(filterResult.tasks, DEFAULT_TASK_SORT, {
-        timezone,
-        dateDriven: true,
-    })
+    const relevantTasks = sortForDateView(filterResult.tasks, timezone)
 
     if (outputMode === 'ids-only') {
         outputIds(relevantTasks, (task) => task.id, formatNextCursorNotice(nextCursor))
