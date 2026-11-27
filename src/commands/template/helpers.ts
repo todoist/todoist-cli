@@ -12,8 +12,8 @@ export function warnDeprecated(oldCommand: string, replacement: string): void {
     )
 }
 
-export function printSavedTemplate(template: Template): void {
-    console.log(`Saved template: ${template.name}`)
+export function printSavedTemplate(template: Template, label = 'Saved template'): void {
+    console.log(`${label}: ${template.name}`)
     console.log(chalk.dim(`ID: ${template.id}`))
     console.log(
         chalk.dim(
@@ -22,4 +22,15 @@ export function printSavedTemplate(template: Template): void {
                 : 'Personal template',
         ),
     )
+}
+
+/** Where a template comes from, as the CLI names it: gallery, personal or workspace. */
+export function describeTemplateSource(template: Template): string {
+    if (template.templateSource === 'todoist') {
+        return 'gallery'
+    }
+    if (template.workspaceId) {
+        return template.sharedWithWorkspaceMembers ? 'workspace, shared with members' : 'workspace'
+    }
+    return 'personal'
 }
