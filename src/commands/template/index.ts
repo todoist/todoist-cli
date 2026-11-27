@@ -1,9 +1,10 @@
 import { Command } from 'commander'
 import { CliError } from '../../lib/errors.js'
 import { failWithUsage } from '../../lib/missing-argument.js'
+import { exportProject, type ExportOptions } from '../project/export.js'
 import { createFromTemplate, type CreateFromTemplateOptions } from './create.js'
-import { exportTemplateFile, type ExportFileOptions } from './export-file.js'
 import { exportTemplateUrl, type ExportUrlOptions } from './export-url.js'
+import { warnDeprecated } from './helpers.js'
 import { importTemplateFile, type ImportFileOptions } from './import-file.js'
 import { importTemplateById, type ImportIdOptions } from './import-id.js'
 
@@ -12,14 +13,16 @@ export function registerTemplateCommand(program: Command): void {
         .command('template')
         .description('Manage project templates (export, import, create)')
 
+    // Deprecated: moved to `td project export`. Hidden, kept for one release.
     const exportFileCmd = template
-        .command('export-file [project]')
-        .description('Export a project as a CSV template file')
+        .command('export-file [project]', { hidden: true })
+        .description('Deprecated: use `td project export`')
         .option('--project <ref>', 'Project reference (name or id:xxx)')
         .option('--relative-dates', 'Use relative dates in the export')
         .option('--output <path>', 'Write to file instead of stdout')
         .option('--json', 'Output as JSON')
-        .action((projectArg: string | undefined, options: ExportFileOptions) => {
+        .action((projectArg: string | undefined, options: ExportOptions) => {
+            warnDeprecated('td template export-file', 'td project export')
             if (projectArg && options.project) {
                 throw new CliError(
                     'CONFLICTING_OPTIONS',
@@ -31,7 +34,7 @@ export function registerTemplateCommand(program: Command): void {
                 failWithUsage(exportFileCmd)
                 return
             }
-            return exportTemplateFile(ref, options)
+            return exportProject(ref, options)
         })
 
     const exportUrlCmd = template

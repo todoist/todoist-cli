@@ -4,17 +4,14 @@ import chalk from 'chalk'
 import { getApi } from '../../lib/api/core.js'
 import { resolveProjectRef } from '../../lib/refs.js'
 
-export interface ExportFileOptions {
+export interface ExportOptions {
     project?: string
     relativeDates?: boolean
     output?: string
     json?: boolean
 }
 
-export async function exportTemplateFile(
-    projectRef: string,
-    options: ExportFileOptions,
-): Promise<void> {
+export async function exportProject(projectRef: string, options: ExportOptions): Promise<void> {
     const api = await getApi()
     const project = await resolveProjectRef(api, projectRef)
 
@@ -31,7 +28,7 @@ export async function exportTemplateFile(
     if (options.output) {
         const outputPath = path.resolve(options.output)
         fs.writeFileSync(outputPath, content, 'utf-8')
-        console.log(`Template written to ${outputPath}`)
+        console.log(`CSV written to ${outputPath}`)
         console.log(chalk.dim(`Project: ${project.name}`))
         return
     }

@@ -45,83 +45,31 @@ describe('template', () => {
         mockResolveProjectRef.mockResolvedValue(fixtures.projects.work)
     })
 
-    describe('export-file', () => {
-        it('exports template as CSV to stdout', async () => {
+    describe('export-file (deprecated)', () => {
+        it('still exports, and warns to use td project export', async () => {
             const program = createProgram()
             mockApi.exportProjectAsCsv.mockResolvedValue('task,priority\nBuy milk,4')
             const stdoutSpy = captureStream()
+            const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
             await program.parseAsync(['node', 'td', 'template', 'export-file', 'Work'])
 
-            expect(mockResolveProjectRef).toHaveBeenCalledWith(mockApi, 'Work')
             expect(mockApi.exportProjectAsCsv).toHaveBeenCalledWith({
                 projectId: fixtures.projects.work.id,
                 useRelativeDates: undefined,
             })
             expect(stdoutSpy).toHaveBeenCalledWith('task,priority\nBuy milk,4')
-        })
-
-        it('writes template to file with --output', async () => {
-            const program = createProgram()
-            mockApi.exportProjectAsCsv.mockResolvedValue('task,priority\nBuy milk,4')
-
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'export-file',
-                'Work',
-                '--output',
-                '/tmp/template.csv',
-            ])
-
-            expect(vi.mocked(fs.writeFileSync)).toHaveBeenCalledWith(
-                '/tmp/template.csv',
-                'task,priority\nBuy milk,4',
-                'utf-8',
+            expect(stderrSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Warning:'),
+                expect.stringContaining('Use `td project export` instead.'),
             )
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Template written to'))
         })
 
-        it('passes --relative-dates flag', async () => {
+        it('is hidden from td template --help', () => {
             const program = createProgram()
-            mockApi.exportProjectAsCsv.mockResolvedValue('content')
-            captureStream()
+            const template = program.commands.find((c) => c.name() === 'template')!
 
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'export-file',
-                'Work',
-                '--relative-dates',
-            ])
-
-            expect(mockApi.exportProjectAsCsv).toHaveBeenCalledWith({
-                projectId: fixtures.projects.work.id,
-                useRelativeDates: true,
-            })
-        })
-
-        it('outputs JSON with --json', async () => {
-            const program = createProgram()
-            mockApi.exportProjectAsCsv.mockResolvedValue('csv content')
-
-            await program.parseAsync(['node', 'td', 'template', 'export-file', 'Work', '--json'])
-
-            const output = consoleSpy.mock.calls[0][0] as string
-            const parsed = JSON.parse(output)
-            expect(parsed.content).toBe('csv content')
-        })
-
-        it('accepts --project flag', async () => {
-            const program = createProgram()
-            mockApi.exportProjectAsCsv.mockResolvedValue('content')
-            captureStream()
-
-            await program.parseAsync(['node', 'td', 'template', 'export-file', '--project', 'Work'])
-
-            expect(mockResolveProjectRef).toHaveBeenCalledWith(mockApi, 'Work')
+            expect(template.helpInformation()).not.toContain('export-file')
         })
     })
 
