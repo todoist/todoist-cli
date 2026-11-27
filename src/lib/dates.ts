@@ -19,6 +19,15 @@ export function toIntlTimeZone(timeZone: string): string {
 
 const FORMAT_OPTIONS = {
     day: { year: 'numeric', month: '2-digit', day: '2-digit' },
+    wallClock: {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+    },
     dateTime: {
         month: 'short',
         day: 'numeric',
@@ -117,6 +126,48 @@ const FIXED_INSTANT = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/
 export function dueDateDay(dueDate: string, timeZone?: string): string {
     if (FIXED_INSTANT.test(dueDate)) return formatDateInTimezone(new Date(dueDate), timeZone)
     return dueDate.slice(0, 10)
+}
+
+const HOUR_MS = 60 * 60 * 1000
+
+/** How far `timeZone`'s clock is ahead of UTC at `instant`, in milliseconds. */
+function offsetAt(instant: number, timeZone: string | undefined): number {
+    const parts = formatterIn(timeZone, 'wallClock').formatToParts(new Date(instant))
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+        Number(parts.find((p) => p.type === type)?.value)
+    const wallClockAsUtc = Date.UTC(
+        part('year'),
+        part('month') - 1,
+        part('day'),
+        part('hour'),
+        part('minute'),
+        part('second'),
+    )
+    return wallClockAsUtc - (instant - (((instant % 1000) + 1000) % 1000))
+}
+
+/**
+ * The instant `day` (`YYYY-MM-DD`) begins in `timeZone` (an IANA name or a Todoist fixed
+ * offset): its midnight, or the first moment that exists on a day whose midnight a clock change
+ * skips. Without a time zone, or with one `Intl` does not know, the machine's is used.
+ */
+export function startOfDayInTimezone(day: string, timeZone?: string): Date {
+    const previousDay = addDays(day, -1)
+    const [year, month, date] = day.split('-').map(Number)
+    const midnightAsUtc = Date.UTC(year, month - 1, date)
+    // A clock change near midnight gives the day's start one of the offsets in force a day either
+    // side of it. Of the instants those offsets give, the start is the one on `day` whose moment
+    // before is still on the day before.
+    const starts = [-24, 0, 24]
+        .map((hours) => midnightAsUtc - offsetAt(midnightAsUtc + hours * HOUR_MS, timeZone))
+        .filter(
+            (instant) =>
+                formatDateInTimezone(new Date(instant), timeZone) === day &&
+                formatDateInTimezone(new Date(instant - 1), timeZone) === previousDay,
+        )
+    return new Date(
+        starts.length > 0 ? Math.min(...starts) : midnightAsUtc - offsetAt(midnightAsUtc, timeZone),
+    )
 }
 
 /** The `YYYY-MM-DD` day `days` calendar days after `day`, or before it when `days` is negative. */

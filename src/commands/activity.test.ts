@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../lib/api/core.js', () => ({
     getApi: vi.fn(),
     getCurrentUserId: vi.fn(),
+    getAccountTimezone: vi.fn(async () => 'UTC'),
 }))
 
-import { getCurrentUserId } from '../lib/api/core.js'
+import { getAccountTimezone, getCurrentUserId } from '../lib/api/core.js'
 import { setupApiMock } from '../test-support/api-mock.js'
 import { fixtures } from '../test-support/fixtures.js'
 import { type MockApi, mockUnjoinedProject } from '../test-support/mock-api.js'
@@ -134,59 +135,89 @@ describe('activity command', () => {
         )
     })
 
-    it('filters by date range', async () => {
-        const program = createProgram()
-
-        await program.parseAsync([
-            'node',
-            'td',
-            'activity',
-            '--since',
-            '2025-01-01',
-            '--until',
-            '2025-01-10',
-        ])
-
-        expect(mockApi.getActivityLogs).toHaveBeenCalledWith(
-            expect.objectContaining({
-                dateFrom: '2025-01-01',
-                dateTo: '2025-01-10',
-            }),
-        )
-    })
-
-    it('asks for the days typed when the clock is west of UTC', async () => {
-        // The SDK sends a Date as its calendar day in the local timezone, and a
-        // YYYY-MM-DD string as it is.
-        const dayTheSdkSends = (value: unknown) =>
-            value instanceof Date
-                ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
-                : value
-        const originalTz = process.env.TZ
-        process.env.TZ = 'America/Chicago'
-        try {
-            await createProgram().parseAsync([
-                'node',
-                'td',
-                'activity',
-                '--since',
-                '2025-01-01',
-                '--until',
-                '2025-01-10',
-            ])
-
-            const [args] = mockApi.getActivityLogs.mock.calls[0]
-            expect({
-                dateFrom: dayTheSdkSends(args.dateFrom),
-                dateTo: dayTheSdkSends(args.dateTo),
-            }).toEqual({ dateFrom: '2025-01-01', dateTo: '2025-01-10' })
-        } finally {
-            if (originalTz === undefined) {
-                delete process.env.TZ
-            } else {
-                process.env.TZ = originalTz
-            }
+    describe('--since and --until', () => {
+        function runActivity(...flags: string[]) {
+            return createProgram().parseAsync(['node', 'td', 'activity', ...flags])
         }
+
+        it('asks for whole days, from the start of --since to the end of --until', async () => {
+            await runActivity('--since', '2025-01-01', '--until', '2025-01-10')
+
+            expect(mockApi.getActivityLogs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    dateFrom: '2025-01-01T00:00:00Z',
+                    dateTo: '2025-01-11T00:00:00Z',
+                }),
+            )
+        })
+
+        it("reads the days in the account's time zone", async () => {
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/Chicago')
+
+            await runActivity('--since', '2025-01-01', '--until', '2025-01-10')
+
+            expect(mockApi.getActivityLogs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    dateFrom: '2025-01-01T06:00:00Z',
+                    dateTo: '2025-01-11T06:00:00Z',
+                }),
+            )
+        })
+
+        it('covers a single day when --since and --until are the same', async () => {
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/New_York')
+
+            // Clocks go forward on 8 March 2026, so this day is 23 hours long.
+            await runActivity('--since', '2026-03-08', '--until', '2026-03-08')
+
+            expect(mockApi.getActivityLogs).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    dateFrom: '2026-03-08T05:00:00Z',
+                    dateTo: '2026-03-09T04:00:00Z',
+                }),
+            )
+        })
+
+        it('takes either flag on its own', async () => {
+            await runActivity('--since', '2025-01-01')
+            await runActivity('--until', '2025-01-10')
+
+            const [[sinceOnly], [untilOnly]] = mockApi.getActivityLogs.mock.calls
+            expect(sinceOnly).toMatchObject({ dateFrom: '2025-01-01T00:00:00Z', dateTo: undefined })
+            expect(untilOnly).toMatchObject({ dateFrom: undefined, dateTo: '2025-01-11T00:00:00Z' })
+        })
+
+        it('does not look the time zone up without them', async () => {
+            await runActivity()
+
+            expect(getAccountTimezone).not.toHaveBeenCalled()
+            expect(mockApi.getActivityLogs).toHaveBeenCalledWith(
+                expect.objectContaining({ dateFrom: undefined, dateTo: undefined }),
+            )
+        })
+
+        it('rejects an --until before --since before calling the API', async () => {
+            await expect(
+                runActivity('--since', '2025-01-10', '--until', '2025-01-09'),
+            ).rejects.toMatchObject({
+                code: 'INVALID_DATE_RANGE',
+                message: '--until must not be before --since',
+            })
+            expect(mockApi.getActivityLogs).not.toHaveBeenCalled()
+        })
+
+        it('accepts a year and rejects a longer range before calling the API', async () => {
+            await runActivity('--since', '2025-01-01', '--until', '2025-12-31')
+            expect(mockApi.getActivityLogs).toHaveBeenCalledTimes(1)
+
+            await expect(
+                runActivity('--since', '2025-01-01', '--until', '2026-01-01'),
+            ).rejects.toMatchObject({
+                code: 'INVALID_DATE_RANGE',
+                message: 'Activity date ranges cannot exceed 365 days',
+            })
+            expect(mockApi.getActivityLogs).toHaveBeenCalledTimes(1)
+        })
     })
 
     it.each([

@@ -6,6 +6,7 @@ import {
     formatDateInTimezone,
     formatDateTime,
     parseLocalDate,
+    startOfDayInTimezone,
 } from './dates.js'
 
 describe('addDays', () => {
@@ -275,5 +276,67 @@ describe('formatDateTime', () => {
         // The test run pins the machine's time zone to UTC.
         expect(formatDateTime(instant)).toBe('Jan 9, 2026, 2:00 AM')
         expect(formatDateTime(instant, 'Mars/Olympus_Mons')).toBe('Jan 9, 2026, 2:00 AM')
+    })
+})
+
+describe('startOfDayInTimezone', () => {
+    it.each([
+        ['a day in UTC', 'UTC', '2025-01-01', '2025-01-01T00:00:00.000Z'],
+        ['a day west of UTC', 'America/Chicago', '2025-01-01', '2025-01-01T06:00:00.000Z'],
+        ['a day east of UTC', 'Asia/Tokyo', '2025-01-01', '2024-12-31T15:00:00.000Z'],
+        ['a day at a Todoist fixed offset', 'GMT +5:30', '2025-01-01', '2024-12-31T18:30:00.000Z'],
+        ['the day clocks go forward', 'America/New_York', '2026-03-08', '2026-03-08T05:00:00.000Z'],
+        [
+            'the day after clocks go forward',
+            'America/New_York',
+            '2026-03-09',
+            '2026-03-09T04:00:00.000Z',
+        ],
+        // Chile skips midnight: 6 September 2026 begins at 01:00, at the new offset.
+        [
+            'a day whose midnight is skipped',
+            'America/Santiago',
+            '2026-09-06',
+            '2026-09-06T04:00:00.000Z',
+        ],
+        // Chile goes back from 00:00 to 23:00 on the 4th, so the 5th begins an hour later.
+        [
+            'a day after clocks go back at midnight',
+            'America/Santiago',
+            '2026-04-05',
+            '2026-04-05T04:00:00.000Z',
+        ],
+    ])('finds the start of %s', (_, timeZone, day, expected) => {
+        expect(startOfDayInTimezone(day, timeZone).toISOString()).toBe(expected)
+    })
+
+    it.each([
+        'America/New_York',
+        'America/Santiago',
+        'America/Havana',
+        'Asia/Beirut',
+        'Africa/Cairo',
+        'Australia/Lord_Howe',
+        'Asia/Kolkata',
+        'Pacific/Chatham',
+    ])('gives every day of 2026 in %s a start on that day, right after the day before', (zone) => {
+        const wrong: string[] = []
+        for (let offset = 0; offset < 365; offset++) {
+            const day = addDays('2026-01-01', offset)
+            const start = startOfDayInTimezone(day, zone).getTime()
+            const onDay = formatDateInTimezone(new Date(start), zone) === day
+            const afterDayBefore =
+                formatDateInTimezone(new Date(start - 1), zone) === addDays(day, -1)
+            if (!onDay || !afterDayBefore) wrong.push(day)
+        }
+        expect(wrong).toEqual([])
+    })
+
+    it("uses the machine's time zone when none is given, or for a name it does not know", () => {
+        // The test run pins the machine's time zone to UTC.
+        expect(startOfDayInTimezone('2025-01-01').toISOString()).toBe('2025-01-01T00:00:00.000Z')
+        expect(startOfDayInTimezone('2025-01-01', 'Mars/Olympus_Mons').toISOString()).toBe(
+            '2025-01-01T00:00:00.000Z',
+        )
     })
 })
