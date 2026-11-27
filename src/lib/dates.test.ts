@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
     formatDateInTimezone,
+    formatDateTime,
     formatDateHeader,
     getLocalDate,
     isDueBefore,
@@ -433,5 +434,21 @@ describe('formatDateInTimezone', () => {
     it("uses the machine's time zone for a name it does not know", () => {
         // The test run pins the machine's time zone to UTC.
         expect(formatDateInTimezone(instant, 'Mars/Olympus_Mons')).toBe('2026-01-09')
+    })
+})
+
+describe('formatDateTime', () => {
+    // 02:00 UTC on 9 January is still 8 PM on the 8th six hours west of UTC.
+    const instant = new Date('2026-01-09T02:00:00Z')
+
+    it('shows the date and time in the given time zone', () => {
+        expect(formatDateTime(instant, 'America/Chicago')).toBe('Jan 8, 2026, 8:00 PM')
+        expect(formatDateTime(instant, 'GMT -6:00')).toBe('Jan 8, 2026, 8:00 PM')
+    })
+
+    it("uses the machine's time zone when none is given, or for a name it does not know", () => {
+        // The test run pins the machine's time zone to UTC.
+        expect(formatDateTime(instant)).toBe('Jan 9, 2026, 2:00 AM')
+        expect(formatDateTime(instant, 'Mars/Olympus_Mons')).toBe('Jan 9, 2026, 2:00 AM')
     })
 })

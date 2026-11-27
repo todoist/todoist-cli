@@ -23,8 +23,10 @@ export function toIntlTimeZone(timeZone: string): string {
     return `${sign}${hours.padStart(2, '0')}:${minutes}`
 }
 
-function dayFormatter(timeZone: string | undefined): Intl.DateTimeFormat {
-    const options = { year: 'numeric', month: '2-digit', day: '2-digit' } as const
+function formatterIn(
+    timeZone: string | undefined,
+    options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
     if (timeZone) {
         try {
             return new Intl.DateTimeFormat('en-US', {
@@ -45,7 +47,11 @@ function dayFormatter(timeZone: string | undefined): Intl.DateTimeFormat {
  * know, the machine's is used.
  */
 export function formatDateInTimezone(date: Date, timeZone?: string): string {
-    const parts = dayFormatter(timeZone).formatToParts(date)
+    const parts = formatterIn(timeZone, {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date)
     const part = (type: Intl.DateTimeFormatPartTypes) =>
         parts.find((p) => p.type === type)?.value ?? ''
     return `${part('year')}-${part('month')}-${part('day')}`
@@ -184,12 +190,17 @@ export function parseLocalDate(value: string): Date | null {
     return new Date(utc.getTime() - offsetMinutes * MINUTE_MS)
 }
 
-export function formatDateTime(date: Date): string {
-    return date.toLocaleString('en-US', {
+/**
+ * A date and time for people to read, such as `Jan 8, 2026, 8:00 PM`, in `timeZone` (an IANA
+ * name or a Todoist fixed offset). Without a time zone, or with one `Intl` does not know, the
+ * machine's is used.
+ */
+export function formatDateTime(date: Date, timeZone?: string): string {
+    return formatterIn(timeZone, {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-    })
+    }).format(date)
 }

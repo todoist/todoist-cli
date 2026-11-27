@@ -1,7 +1,8 @@
 import { type Comment, formatUserShortName, type TodoistApi } from '@todoist/sdk'
 import chalk from 'chalk'
-import { getApi } from '../../lib/api/core.js'
+import { getAccountTimezone, getApi } from '../../lib/api/core.js'
 import { fetchCollaboratorsForProject } from '../../lib/collaborators.js'
+import { formatDateTime } from '../../lib/dates.js'
 import { renderMarkdown } from '../../lib/markdown.js'
 import type { ViewOptions } from '../../lib/options.js'
 import { formatFileSize, formatJson } from '../../lib/output.js'
@@ -49,7 +50,7 @@ export async function viewComment(commentId: string, options: ViewOptions): Prom
     console.log(chalk.bold('Comment'))
     console.log('')
     console.log(`ID:       ${comment.id}`)
-    console.log(`Posted:   ${comment.postedAt}`)
+    console.log(`Posted:   ${formatDateTime(comment.postedAt, await getAccountTimezone())}`)
     if (comment.uidsToNotify?.length) {
         console.log(`Notified: ${await describeNotified(api, comment)}`)
     }
