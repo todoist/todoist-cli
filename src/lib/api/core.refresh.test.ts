@@ -1,6 +1,7 @@
 import { CliError as BaseCliError } from '@todoist/cli-core'
-import type { CustomFetch, CustomFetchResponse } from '@todoist/sdk'
+import type { CustomFetch } from '@todoist/sdk'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../../test-support/json-response.js'
 import type { ResolvedUser } from '../auth.js'
 
 const mocks = vi.hoisted(() => ({
@@ -22,17 +23,6 @@ vi.mock('../usage-tracking.js', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../usage-tracking.js')>()),
     createTrackedFetch: () => mocks.fetch,
 }))
-
-function jsonResponse(status: number, body: unknown): CustomFetchResponse {
-    return {
-        ok: status >= 200 && status < 300,
-        status,
-        statusText: status === 401 ? 'Unauthorized' : 'OK',
-        headers: { 'content-type': 'application/json' },
-        text: async () => JSON.stringify(body),
-        json: async () => body,
-    }
-}
 
 /** An API that only accepts `validToken`. */
 function acceptOnly(validToken: string): void {

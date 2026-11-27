@@ -1,5 +1,6 @@
 import type { CustomFetch } from '@todoist/sdk'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { jsonResponse } from '../../test-support/json-response.js'
 import { rawUser } from '../../test-support/raw-user.js'
 
 const mocks = vi.hoisted(() => ({
@@ -23,14 +24,7 @@ function accountIn(timezone: string): void {
     const body = rawUser({
         tz_info: { timezone, hours: 0, minutes: 0, is_dst: 0, gmt_string: '+00:00' },
     })
-    mocks.fetch.mockImplementation((async () => ({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'application/json' },
-        text: async () => JSON.stringify(body),
-        json: async () => body,
-    })) satisfies CustomFetch)
+    mocks.fetch.mockImplementation((async () => jsonResponse(200, body)) satisfies CustomFetch)
 }
 
 describe('getAccountTimezone', () => {

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./core.js', () => ({ getApi: vi.fn() }))
 
+import { jsonResponse } from '../../test-support/json-response.js'
 import { rawUser } from '../../test-support/raw-user.js'
 import { getApi } from './core.js'
 import { fetchUserStatus, writeUserStatus } from './user-status.js'
@@ -13,14 +14,7 @@ const customFetch = vi.fn<CustomFetch>()
 
 function reply(status: unknown) {
     const body = { user: rawUser({ status }) }
-    customFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        headers: { 'content-type': 'application/json' },
-        text: async () => JSON.stringify(body),
-        json: async () => body,
-    })
+    customFetch.mockResolvedValue(jsonResponse(200, body))
 }
 
 function sentBody(): Record<string, unknown> {
