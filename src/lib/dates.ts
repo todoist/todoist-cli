@@ -9,11 +9,14 @@ export function getLocalDate(daysOffset = 0): string {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-// A Todoist account can use a fixed offset named like `GMT -6:00` or `GMT +5:30`. `Intl`
-// rejects that name, but accepts the same offset written as `-06:00`.
 const TODOIST_FIXED_OFFSET = /^GMT ([+-])(\d{1,2}):(\d{2})$/
 
-function toIntlTimeZone(timeZone: string): string {
+/**
+ * A Todoist account can use a fixed offset named like `GMT -6:00` or `GMT +5:30`. `Intl`
+ * rejects that name, but accepts the same offset written as `-06:00`, so this rewrites it.
+ * Any other name comes back as it is.
+ */
+export function toIntlTimeZone(timeZone: string): string {
     const match = TODOIST_FIXED_OFFSET.exec(timeZone)
     if (!match) return timeZone
     const [, sign, hours, minutes] = match

@@ -12,6 +12,7 @@ import {
 } from '@todoist/sdk'
 import { buildReloginCommand } from '../auth-flags.js'
 import { getAuthMetadata, resolveActiveUser } from '../auth.js'
+import { toIntlTimeZone } from '../dates.js'
 import { CliError, SyncCommandError } from '../errors.js'
 import { type AdditionalScopeFlag, oauthScopeFor } from '../oauth-scopes.js'
 import { ensureWriteAllowed, isMutatingApiMethod, isMutatingSyncPayload } from '../permissions.js'
@@ -492,18 +493,20 @@ function getAccountUser(): Promise<AccountUser> {
 let accountTimezoneCache: string | null = null
 
 /**
- * The IANA timezone on the Todoist account, which is what the apps resolve a
+ * The timezone on the Todoist account, which is what the apps resolve a
  * floating due time in. It can differ from the machine clock inside a
  * container, over SSH, or when someone sets their timezone in Todoist and
  * travels, so ordering timed tasks by the local clock reverses pairs around
- * midnight. Falls back to the machine on a failed lookup, and caches for the
- * life of the process.
+ * midnight. An IANA name, or a fixed offset such as `-06:00` for an account
+ * set to `GMT -6:00`, either of which `Intl` accepts. Falls back to the
+ * machine on a failed lookup, and caches for the life of the process.
  */
 export async function getAccountTimezone(): Promise<string | undefined> {
     if (accountTimezoneCache) return accountTimezoneCache
     try {
         const user = await getAccountUser()
-        accountTimezoneCache = user.tzInfo?.timezone || localTimezone()
+        const timezone = user.tzInfo?.timezone
+        accountTimezoneCache = timezone ? toIntlTimeZone(timezone) : localTimezone()
     } catch {
         accountTimezoneCache = localTimezone()
     }
