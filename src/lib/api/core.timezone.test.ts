@@ -55,3 +55,29 @@ describe('getAccountTimezone', () => {
         await expect(getAccountTimezone()).resolves.toBe(expected)
     })
 })
+
+describe('the account user lookup', () => {
+    beforeEach(() => {
+        vi.resetModules()
+        vi.clearAllMocks()
+        // A token from TODOIST_API_TOKEN carries no stored user id, so the id has to be fetched.
+        mocks.resolveActiveUser.mockResolvedValue({
+            id: 'env',
+            email: '',
+            token: 'token',
+            authMode: 'read-write',
+            source: 'env',
+            canRefresh: false,
+        })
+    })
+
+    it('fetches the user once for both the time zone and the current user id', async () => {
+        accountIn('America/Chicago')
+        const { getAccountTimezone, getCurrentUserId } = await import('./core.js')
+
+        await expect(getAccountTimezone()).resolves.toBe('America/Chicago')
+        await expect(getCurrentUserId()).resolves.toBe('1')
+
+        expect(mocks.fetch).toHaveBeenCalledTimes(1)
+    })
+})

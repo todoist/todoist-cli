@@ -453,8 +453,8 @@ let currentUserIdCache: string | null = null
 
 export async function getCurrentUserId(): Promise<string> {
     if (currentUserIdCache) return currentUserIdCache
-    const api = await getApi()
-    const user = await api.getUser()
+    // Shares the one `getUser` with the account's time zone and language.
+    const user = await getAccountUser()
     currentUserIdCache = user.id
     return currentUserIdCache
 }
