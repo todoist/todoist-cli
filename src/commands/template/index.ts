@@ -10,7 +10,14 @@ import { warnDeprecated } from './helpers.js'
 export function registerTemplateCommand(program: Command): void {
     const template = program
         .command('template')
-        .description('Manage project templates (export, import, create)')
+        .description('Manage templates')
+        .addHelpText(
+            'after',
+            `
+To use a template, see:
+  td project create --from-template <id>             Create a project from a template
+  td project import <project> --from-template <id>   Add a template to an existing project`,
+        )
 
     // Deprecated: moved to `td project export`. Hidden, kept for one release.
     const exportFileCmd = template
@@ -59,7 +66,7 @@ export function registerTemplateCommand(program: Command): void {
 
     template
         .command('create')
-        .description('Create a new project from a template file')
+        .description('Deprecated: use `td project create --from-csv`')
         .requiredOption('--name <name>', 'Name for the new project')
         .requiredOption('--file <path>', 'Path to the template file')
         .option('--file-name <name>', 'Override the file name sent to the API')
@@ -67,6 +74,7 @@ export function registerTemplateCommand(program: Command): void {
         .option('--json', 'Output as JSON')
         .option('--dry-run', 'Preview what would happen without executing')
         .action((options: CreateFromTemplateOptions) => {
+            warnDeprecated('td template create --file', 'td project create --from-csv')
             return createFromTemplate(options)
         })
 

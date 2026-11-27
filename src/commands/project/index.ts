@@ -11,6 +11,7 @@ import { archivedCount } from './archived-count.js'
 import { listArchivedProjects } from './archived.js'
 import { browseProject } from './browse.js'
 import { listCollaborators } from './collaborators.js'
+import { createProjectFrom, hasCreateSource, validateCreateFrom } from './create-from.js'
 import { createProject } from './create.js'
 import { deleteProject } from './delete.js'
 import { exportProject, type ExportOptions } from './export.js'
@@ -109,8 +110,8 @@ Examples:
 
     const createCmd = project
         .command('create')
-        .description('Create a project')
-        .option('--name <name>', 'Project name (required)')
+        .description('Create a project, empty or from a CSV file or a template')
+        .option('--name <name>', 'Project name (required, except with --from-template)')
         .option('--color <color>', 'Project color')
         .addOption(
             withCaseInsensitiveChoices(new Option('--icon <icon>', 'Project icon'), ICON_CHOICES),
@@ -125,9 +126,33 @@ Examples:
         )
         .option('--description <text>', 'Project description (markdown)')
         .option('--stdin', 'Read project description from stdin')
+        .option('--from-csv <path>', 'Create the project from a CSV file')
+        .option(
+            '--from-template <id>',
+            'Create the project from a template: a gallery slug or a UT_ template ID. Named after the template unless --name is given',
+        )
+        .option('--file-name <name>', 'Override the file name sent to the API (--from-csv only)')
+        .option('--locale <locale>', 'Language of the template content (--from-template only)')
+        .option(
+            '--workspace <ref>',
+            'Workspace to create the project in (--from-csv or --from-template only)',
+        )
+        .option('--folder <ref>', 'Workspace folder (--from-template with --workspace only)')
         .option('--json', 'Output the created project as JSON')
         .option('--dry-run', 'Preview what would happen without executing')
+        .addHelpText(
+            'after',
+            `
+Examples:
+  td project create --name "New Project" --color blue
+  td project create --name "Q2 plan" --from-csv plan.csv
+  td project create --from-template product-launch --workspace "Acme" --folder "Marketing"`,
+        )
         .action((options) => {
+            if (hasCreateSource(options)) {
+                return createProjectFrom(options)
+            }
+            validateCreateFrom(options)
             if (!options.name) {
                 failWithUsage(createCmd)
                 return
