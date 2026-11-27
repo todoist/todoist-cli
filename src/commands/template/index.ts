@@ -1,9 +1,12 @@
-import { Command } from 'commander'
+import { type ColorKey, colors } from '@todoist/sdk'
+import { Command, Option } from 'commander'
+import { withCaseInsensitiveChoices } from '../../lib/completion.js'
 import { CliError } from '../../lib/errors.js'
 import { failWithUsage } from '../../lib/missing-argument.js'
 import { exportProject, type ExportOptions } from '../project/export.js'
 import { importIntoProject } from '../project/import.js'
-import { createFromTemplate, type CreateFromTemplateOptions } from './create.js'
+import { createTemplateFromCsv } from './create-from-csv.js'
+import { createFromTemplate } from './create.js'
 import { exportTemplateUrl, type ExportUrlOptions } from './export-url.js'
 import { warnDeprecated } from './helpers.js'
 
@@ -66,16 +69,68 @@ To use a template, see:
 
     template
         .command('create')
-        .description('Deprecated: use `td project create --from-csv`')
-        .requiredOption('--name <name>', 'Name for the new project')
-        .requiredOption('--file <path>', 'Path to the template file')
+        .description('Create a template from a CSV file')
+        .requiredOption('--name <name>', 'Template name')
+        .option('--from-csv <path>', 'CSV file to create the template from')
+        .option('--description <text>', 'Description shown with the template (required)')
+        .addOption(
+            withCaseInsensitiveChoices(
+                new Option('--color <color>', 'Template color (default: charcoal)'),
+                colors.map((c) => c.key),
+            ),
+        )
         .option('--file-name <name>', 'Override the file name sent to the API')
-        .option('--workspace <ref>', 'Workspace to create the project in')
+        .option(
+            '--file <path>',
+            'Deprecated: creates a project. Use `td project create --from-csv`',
+        )
+        .option('--workspace <ref>', 'Deprecated, with --file: workspace for the new project')
         .option('--json', 'Output as JSON')
         .option('--dry-run', 'Preview what would happen without executing')
-        .action((options: CreateFromTemplateOptions) => {
-            warnDeprecated('td template create --file', 'td project create --from-csv')
-            return createFromTemplate(options)
+        .addHelpText(
+            'after',
+            `
+Each run saves a new template. Templates can't be deleted from the CLI yet.
+To save a project as a template, use: td project save-as-template <project>
+
+Examples:
+  td template create --name "Onboarding" --from-csv onboarding.csv --description "Steps for a new hire"`,
+        )
+        .action((options: TemplateCreateOptions) => {
+            if (options.file !== undefined) {
+                // Before --from-csv, `td template create --file` created a project. It keeps
+                // doing that for one release; the different option name keeps old scripts
+                // from silently creating templates instead.
+                if (options.fromCsv !== undefined) {
+                    throw new CliError(
+                        'CONFLICTING_OPTIONS',
+                        '--file creates a project and --from-csv creates a template: use one',
+                    )
+                }
+                rejectTemplateOnlyOptions(options, '--file')
+                warnDeprecated('td template create --file', 'td project create --from-csv')
+                return createFromTemplate({ ...options, file: options.file })
+            }
+            if (options.fromCsv === undefined) {
+                throw new CliError('INVALID_OPTIONS', 'Specify the CSV file: --from-csv <path>', [
+                    'To save a project as a template: td project save-as-template <project>',
+                ])
+            }
+            if (options.workspace !== undefined) {
+                throw new CliError(
+                    'INVALID_OPTIONS',
+                    '--workspace only applies to the deprecated --file',
+                    ['A template from CSV is saved to your personal templates.'],
+                )
+            }
+            if (!options.description) {
+                throw new CliError('INVALID_OPTIONS', 'A description is required (--description)')
+            }
+            return createTemplateFromCsv({
+                ...options,
+                fromCsv: options.fromCsv,
+                description: options.description,
+            })
         })
 
     // Deprecated: moved to `td project import --from-csv`. Hidden, kept for one release.
@@ -143,4 +198,34 @@ function projectRefFrom(projectArg: string | undefined, projectOption: string | 
         )
     }
     return projectArg || projectOption
+}
+
+interface TemplateCreateOptions {
+    name: string
+    fromCsv?: string
+    description?: string
+    color?: ColorKey
+    fileName?: string
+    file?: string
+    workspace?: string
+    json?: boolean
+    dryRun?: boolean
+}
+
+function rejectTemplateOnlyOptions(options: TemplateCreateOptions, flag: string): void {
+    const given = (
+        [
+            ['description', '--description'],
+            ['color', '--color'],
+        ] as const
+    )
+        .filter(([key]) => options[key] !== undefined)
+        .map(([, name]) => name)
+    if (given.length > 0) {
+        throw new CliError(
+            'INVALID_OPTIONS',
+            `${given.join(', ')} can't be used with ${flag}, which creates a project`,
+            ['To create a template from the CSV, use --from-csv instead of --file.'],
+        )
+    }
 }
