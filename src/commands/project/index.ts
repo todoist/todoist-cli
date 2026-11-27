@@ -1,3 +1,4 @@
+import { colors } from '@todoist/sdk'
 import { Command, Option } from 'commander'
 import { withCaseInsensitiveChoices } from '../../lib/completion.js'
 import { CURSOR_DESCRIPTION } from '../../lib/constants.js'
@@ -24,6 +25,7 @@ import { moveProject } from './move.js'
 import { showPermissions } from './permissions.js'
 import { showProjectProgress } from './progress.js'
 import { reorderProject } from './reorder.js'
+import { saveProjectAsTemplate, type SaveAsTemplateOptions } from './save-as-template.js'
 import { shareProject } from './share.js'
 import { unarchiveProject } from './unarchive.js'
 import { updateProject } from './update.js'
@@ -255,6 +257,48 @@ Examples:
                 return
             }
             return importIntoProject(projectRef, options)
+        })
+
+    const saveAsTemplateCmd = project
+        .command('save-as-template [ref]')
+        .description('Save a project as a template, like the app\'s "Save as template"')
+        .option('--project <ref>', 'Project reference (name or id:xxx)')
+        .option('--name <name>', "Template name (default: the project's name)")
+        .requiredOption('--description <text>', 'Description shown with the template')
+        .addOption(
+            withCaseInsensitiveChoices(
+                new Option('--color <color>', "Template color (default: the project's color)"),
+                colors.map((c) => c.key),
+            ),
+        )
+        .option(
+            '--for-workspace',
+            "Save to the project's workspace instead of your personal templates; keeps assignees",
+        )
+        .option('--json', 'Output the saved template as JSON')
+        .option('--dry-run', 'Preview what would happen without executing')
+        .addHelpText(
+            'after',
+            `
+Each run saves a new template. Templates can't be deleted from the CLI yet.
+
+Examples:
+  td project save-as-template "Onboarding" --description "Steps for a new hire"
+  td project save-as-template "Launch plan" --name "Launch" --description "Our launch steps" --for-workspace`,
+        )
+        .action((ref: string | undefined, options: SaveAsTemplateOptions) => {
+            if (ref && options.project) {
+                throw new CliError(
+                    'CONFLICTING_OPTIONS',
+                    'Cannot specify project both as argument and --project flag',
+                )
+            }
+            const projectRef = ref || options.project
+            if (!projectRef) {
+                failWithUsage(saveAsTemplateCmd)
+                return
+            }
+            return saveProjectAsTemplate(projectRef, options)
         })
 
     const archiveCmd = project
