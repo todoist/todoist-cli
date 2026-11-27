@@ -1,9 +1,13 @@
 import { captureConsole, createTestProgram } from '@todoist/cli-core/testing'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../lib/api/core.js', () => ({
     getApi: vi.fn(),
+    // The same zone as the machine's, which the test run pins to UTC.
+    getAccountTimezone: vi.fn(async () => 'UTC'),
 }))
+
+import { getAccountTimezone } from '../../lib/api/core.js'
 
 import { setupApiMock } from '../../test-support/api-mock.js'
 import { fixtures } from '../../test-support/fixtures.js'
@@ -71,6 +75,39 @@ describe('completed command', () => {
                 until: getTomorrow(),
             }),
         )
+    })
+
+    describe("the account's day", () => {
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it("defaults to the account's today when the machine is already on the next day", async () => {
+            // 03:00 UTC on 25 November is still 9 PM on the 24th for an account in Chicago.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2026-11-25T03:00:00Z'))
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/Chicago')
+
+            await createProgram().parseAsync(['node', 'td', 'completed'])
+
+            expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
+                expect.objectContaining({ since: '2026-11-24', until: '2026-11-25' }),
+            )
+        })
+
+        it('does not look up the time zone when --since and --until are both given', async () => {
+            await createProgram().parseAsync([
+                'node',
+                'td',
+                'completed',
+                '--since',
+                '2026-08-01',
+                '--until',
+                '2026-08-07',
+            ])
+
+            expect(getAccountTimezone).not.toHaveBeenCalled()
+        })
     })
 
     it('accepts custom date range', async () => {

@@ -1,8 +1,8 @@
 import { outputIds, resolveOutputMode } from '@todoist/cli-core'
 import chalk from 'chalk'
-import { getApi, type Project, type Task } from '../../lib/api/core.js'
+import { getAccountTimezone, getApi, type Project, type Task } from '../../lib/api/core.js'
 import { CollaboratorCache, formatAssignee } from '../../lib/collaborators.js'
-import { parseDateOption } from '../../lib/dates.js'
+import { addDays, formatDateInTimezone, parseDateOption } from '../../lib/dates.js'
 import { CliError } from '../../lib/errors.js'
 import type { PaginatedViewOptions } from '../../lib/options.js'
 import {
@@ -24,12 +24,6 @@ interface CompletedListOptions extends PaginatedViewOptions {
 
 const MAX_COMPLETION_DATE_RANGE_DAYS = 93
 const DAY_IN_MS = 24 * 60 * 60 * 1000
-
-function getLocalDate(daysOffset = 0): string {
-    const date = new Date()
-    date.setDate(date.getDate() + daysOffset)
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
 
 function validateCompletionDateRange(since: string, until: string): void {
     const sinceTimestamp = parseDateOption(since, '--since')
@@ -77,8 +71,13 @@ export async function listCompleted(options: CompletedListOptions): Promise<void
           ? parseInt(options.limit, 10)
           : LIMITS.tasks
 
-    const since = isSearch ? undefined : (options.since ?? getLocalDate(0))
-    const until = isSearch ? undefined : (options.until ?? getLocalDate(1))
+    // The API reads the range in the account's time zone, so default it to the account's today.
+    const today =
+        isSearch || (options.since && options.until)
+            ? undefined
+            : formatDateInTimezone(new Date(), await getAccountTimezone())
+    const since = isSearch ? undefined : (options.since ?? today)
+    const until = isSearch ? undefined : (options.until ?? (today && addDays(today, 1)))
 
     if (!isSearch) {
         validateCompletionDateRange(since!, until!)

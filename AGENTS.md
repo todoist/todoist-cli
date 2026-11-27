@@ -68,6 +68,7 @@ Use this to see a change working, on top of `npm run verify`.
 - **API response shape:** client returns `{ results: T[], nextCursor? }` — always destructure.
 - **Priority mapping:** CLI uses `"p1"`–`"p4"` strings; API uses 4=p1 (highest), 1=p4 (lowest). Use `parsePriority` from `src/lib/task-list.ts`, never hand-roll.
 - **Errors:** throw `CliError(code, message, hints?)` from `src/lib/errors.ts` for anything user-facing. The global `parseAsync().catch` in `src/index.ts` renders it correctly in JSON and pretty modes. The same handler also matches `BaseCliError` (re-exported from `src/lib/errors.ts`) so errors thrown by `@todoist/cli-core` helpers route through the same formatter.
+- **Days are the account's days:** Todoist decides "today", "overdue" and the day a task, comment or completion falls on in the account's time zone, which can differ from the machine's (travel, SSH, containers, CI). Get the zone once with `getAccountTimezone()` from `src/lib/api/core.ts`, then use the helpers in `src/lib/dates.ts`: `formatDateInTimezone(new Date(), timezone)` for today, `dueDateDay(task.due.date, timezone)` for a task's day, `addDays` for the next day. Don't build a day from the machine's clock (`getDate()`, `toLocaleDateString()`) or from UTC (`toISOString().slice(0, 10)`). Look the zone up only on the paths that need it, so `--json` and the like don't pay for a request they don't use.
 
 ## Testing
 

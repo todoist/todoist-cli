@@ -1,253 +1,68 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+    addDays,
+    dueDateDay,
+    formatDateHeader,
     formatDateInTimezone,
     formatDateTime,
-    formatDateHeader,
-    getLocalDate,
-    isDueBefore,
-    isDueOnDate,
-    parseDueDateToDay,
     parseLocalDate,
 } from './dates.js'
 
-describe('getLocalDate', () => {
-    it('returns today in YYYY-MM-DD format', () => {
-        const result = getLocalDate(0)
-        expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/)
-        const now = new Date()
-        const expected = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-        expect(result).toBe(expected)
-    })
-
+describe('addDays', () => {
     it.each([
-        { offset: 1, description: 'tomorrow', comparison: '>' },
-        { offset: -1, description: 'yesterday', comparison: '<' },
-        { offset: 7, description: 'next week', comparison: '>' },
-        { offset: -7, description: 'last week', comparison: '<' },
-    ])('returns $description with offset $offset', ({ offset, comparison }) => {
-        const today = getLocalDate(0)
-        const result = getLocalDate(offset)
-
-        if (comparison === '>') {
-            expect(result > today).toBe(true)
-        } else {
-            expect(result < today).toBe(true)
-        }
+        ['the next day', '2026-01-29', 1, '2026-01-30'],
+        ['across the end of a month', '2026-01-31', 1, '2026-02-01'],
+        ['across the end of a year', '2026-12-31', 1, '2027-01-01'],
+        ['onto a leap day', '2028-02-28', 1, '2028-02-29'],
+        ['back across the start of a month', '2026-03-01', -1, '2026-02-28'],
+        ['a week on', '2026-01-29', 7, '2026-02-05'],
+    ])('counts %s', (_, day, days, expected) => {
+        expect(addDays(day, days)).toBe(expected)
     })
 })
 
 describe('formatDateHeader', () => {
-    const today = getLocalDate(0)
+    const today = '2026-01-29'
 
     it.each([
-        { dateOffset: -1, expected: 'Overdue', description: 'yesterday' },
-        { dateOffset: -7, expected: 'Overdue', description: 'last week' },
-        { date: '2020-01-01', expected: 'Overdue', description: 'old date' },
-        { dateOffset: 0, expected: 'Today', description: 'today' },
-        { dateOffset: 1, expected: 'Tomorrow', description: 'tomorrow' },
-    ])('returns "$expected" for $description', ({ dateOffset, date, expected }) => {
-        const testDate = date ?? getLocalDate(dateOffset ?? 0)
-        expect(formatDateHeader(testDate, today)).toBe(expected)
+        { day: '2026-01-28', expected: 'Overdue', description: 'yesterday' },
+        { day: '2026-01-22', expected: 'Overdue', description: 'last week' },
+        { day: '2020-01-01', expected: 'Overdue', description: 'an old date' },
+        { day: '2026-01-29', expected: 'Today', description: 'today' },
+        { day: '2026-01-30', expected: 'Tomorrow', description: 'tomorrow' },
+        { day: '2026-02-03', expected: 'Feb 3', description: 'a later day' },
+    ])('returns "$expected" for $description', ({ day, expected }) => {
+        expect(formatDateHeader(day, today)).toBe(expected)
     })
 
-    it('returns formatted date for future dates beyond tomorrow', () => {
-        const futureDate = getLocalDate(5)
-        const result = formatDateHeader(futureDate, today)
-        expect(result).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/)
+    it('counts tomorrow from the today it is given, across the end of a year', () => {
+        expect(formatDateHeader('2027-01-01', '2026-12-31')).toBe('Tomorrow')
     })
 })
 
-describe('parseDueDateToDay', () => {
+describe('dueDateDay', () => {
     it.each([
-        { input: '2026-01-29', description: 'date-only format' },
-        { input: '2026-01-29T18:00:00', description: 'datetime format' },
-        { input: '2026-01-29T00:00:00', description: 'midnight' },
-        { input: '2026-01-29T23:59:59', description: 'end of day' },
-    ])('parses $description correctly', ({ input }) => {
-        const result = parseDueDateToDay(input)
-        expect(result.toISOString()).toMatch(/2026-01-29T00:00:00/)
+        ['a date', '2026-01-29'],
+        ['a floating time', '2026-01-29T18:00:00'],
+        ['a floating midnight', '2026-01-29T00:00:00'],
+        ['a floating time just before midnight', '2026-01-29T23:59:59'],
+        ['a floating time with fractional seconds', '2026-01-29T09:30:00.000000'],
+    ])("keeps %s on its own day, whatever the account's time zone", (_, dueDate) => {
+        expect(dueDateDay(dueDate, 'Asia/Tokyo')).toBe('2026-01-29')
+        expect(dueDateDay(dueDate, 'America/Chicago')).toBe('2026-01-29')
+        expect(dueDateDay(dueDate)).toBe('2026-01-29')
     })
 
-    it('normalizes different times on same day to identical dates', () => {
-        const times = ['09:00:00', '12:30:15', '18:00:00', '23:59:59']
-        const results = times.map((time) => parseDueDateToDay(`2026-01-29T${time}`))
-
-        // All should be identical
-        results.forEach((result) => {
-            expect(result.getTime()).toBe(results[0].getTime())
-        })
+    it("places a fixed time on the day it falls on in the account's time zone", () => {
+        // 02:00 UTC on 29 January is 8 PM on the 28th in Chicago and 11 AM on the 29th in Tokyo.
+        expect(dueDateDay('2026-01-29T02:00:00Z', 'America/Chicago')).toBe('2026-01-28')
+        expect(dueDateDay('2026-01-29T02:00:00Z', 'Asia/Tokyo')).toBe('2026-01-29')
+        expect(dueDateDay('2026-01-29T02:00:00.000000Z', '-06:00')).toBe('2026-01-28')
     })
-})
 
-describe('isDueOnDate', () => {
-    it.each([
-        // Same date cases (should return true)
-        {
-            dueDate: '2026-01-29',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'exact date match',
-        },
-        {
-            dueDate: '2026-01-29T18:00:00',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'datetime on same date (evening)',
-        },
-        {
-            dueDate: '2026-01-29T09:00:00',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'datetime on same date (morning)',
-        },
-        {
-            dueDate: '2026-01-29T00:00:00',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'datetime on same date (midnight)',
-        },
-        {
-            dueDate: '2026-01-29T23:59:59',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'datetime on same date (end of day)',
-        },
-        {
-            dueDate: '2026-01-31T23:00:00',
-            targetDate: '2026-01-31',
-            expected: true,
-            description: 'month end edge case',
-        },
-
-        // Different date cases (should return false)
-        {
-            dueDate: '2026-01-28',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'day before',
-        },
-        {
-            dueDate: '2026-01-30',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'day after',
-        },
-        {
-            dueDate: '2026-01-28T23:59:59',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'late on day before',
-        },
-        {
-            dueDate: '2026-02-01T01:00:00',
-            targetDate: '2026-01-31',
-            expected: false,
-            description: 'month boundary edge case',
-        },
-        {
-            dueDate: '2025-01-29',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'year boundary',
-        },
-    ])('returns $expected for $description', ({ dueDate, targetDate, expected }) => {
-        expect(isDueOnDate(dueDate, targetDate)).toBe(expected)
-    })
-})
-
-describe('isDueBefore', () => {
-    it.each([
-        // Before cases (should return true)
-        {
-            dueDate: '2026-01-28',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'day before (date only)',
-        },
-        {
-            dueDate: '2026-01-28T18:00:00',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'day before (with time)',
-        },
-        {
-            dueDate: '2026-01-28T23:59:59',
-            targetDate: '2026-01-29',
-            expected: true,
-            description: 'late on day before',
-        },
-        {
-            dueDate: '2025-12-31T23:59:59',
-            targetDate: '2026-01-01',
-            expected: true,
-            description: 'year boundary edge case',
-        },
-        {
-            dueDate: '2026-01-01',
-            targetDate: '2026-01-15',
-            expected: true,
-            description: 'multiple days before',
-        },
-
-        // Same date cases (should return false regardless of time)
-        {
-            dueDate: '2026-01-29',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'same date (date only)',
-        },
-        {
-            dueDate: '2026-01-29T00:00:00',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'same date (midnight)',
-        },
-        {
-            dueDate: '2026-01-29T18:00:00',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'same date (evening)',
-        },
-        {
-            dueDate: '2026-01-29T23:59:59',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'same date (end of day)',
-        },
-        {
-            dueDate: '2026-01-01T00:00:00',
-            targetDate: '2026-01-01',
-            expected: false,
-            description: 'same date (year boundary)',
-        },
-
-        // After cases (should return false)
-        {
-            dueDate: '2026-01-30',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'day after (date only)',
-        },
-        {
-            dueDate: '2026-01-30T01:00:00',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'day after (with time)',
-        },
-        {
-            dueDate: '2026-02-01',
-            targetDate: '2026-01-31',
-            expected: false,
-            description: 'month boundary',
-        },
-        {
-            dueDate: '2027-01-29',
-            targetDate: '2026-01-29',
-            expected: false,
-            description: 'year after',
-        },
-    ])('returns $expected for $description', ({ dueDate, targetDate, expected }) => {
-        expect(isDueBefore(dueDate, targetDate)).toBe(expected)
+    it("places a fixed time on the machine's day when no time zone is given", () => {
+        // The test run pins the machine's time zone to UTC.
+        expect(dueDateDay('2026-01-28T23:30:00Z')).toBe('2026-01-28')
     })
 })
 

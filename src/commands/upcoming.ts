@@ -2,10 +2,10 @@ import { outputIds, resolveOutputMode } from '@todoist/cli-core'
 import chalk from 'chalk'
 import { Command } from 'commander'
 import { parseISO } from 'date-fns/parseISO'
-import { getApi, type Task } from '../lib/api/core.js'
+import { getAccountTimezone, getApi, type Task } from '../lib/api/core.js'
 import { CollaboratorCache, formatAssignee } from '../lib/collaborators.js'
 import { CURSOR_DESCRIPTION } from '../lib/constants.js'
-import { formatDateHeader, getLocalDate, isDueBefore, parseDueDateToDay } from '../lib/dates.js'
+import { dueDateDay, formatDateHeader, formatDateInTimezone } from '../lib/dates.js'
 import type { PaginatedViewOptions } from '../lib/options.js'
 import {
     formatNextCursorFooter,
@@ -43,13 +43,12 @@ export async function showUpcoming(
           ? parseInt(options.limit, 10)
           : LIMITS.tasks
 
-    const today = getLocalDate(0)
-
     const baseQuery = `due before: ${days} days`
     const query = options.anyAssignee ? baseQuery : `(${baseQuery}) & (assigned to: me | !assigned)`
 
     const needsProjects = Boolean(options.workspace || options.personal || outputMode === 'human')
-    const [{ results: tasks, nextCursor }, projects] = await Promise.all([
+    // The API answers the query by the account's day, so date the results by it too.
+    const [{ results: tasks, nextCursor }, projects, timezone] = await Promise.all([
         paginate(
             (cursor, limit) =>
                 api.getTasksByFilter({
@@ -60,7 +59,9 @@ export async function showUpcoming(
             { limit: targetLimit, startCursor: options.cursor },
         ),
         needsProjects ? fetchProjects(api) : Promise.resolve(new Map()),
+        getAccountTimezone(),
     ])
+    const today = formatDateInTimezone(new Date(), timezone)
 
     const filterResult = await filterByWorkspaceOrPersonal({
         api,
@@ -116,12 +117,12 @@ export async function showUpcoming(
     for (const task of relevantTasks) {
         const dueDate = task.due?.date
         if (!dueDate) continue // Skip tasks without due dates
-        if (isDueBefore(dueDate, today)) {
+        // Group by day: a due date with a time ("2026-11-27T09:00:00") is on the same
+        // day as one without.
+        const day = dueDateDay(dueDate, timezone)
+        if (day < today) {
             overdue.push(task)
         } else {
-            // Group by day: a due date with a time ("2026-11-27T09:00:00") is on the same
-            // day as one without.
-            const day = parseDueDateToDay(dueDate).toISOString().slice(0, 10)
             const list = byDate.get(day) || []
             list.push(task)
             byDate.set(day, list)

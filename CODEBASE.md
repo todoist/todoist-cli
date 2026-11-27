@@ -257,8 +257,10 @@ New subcommand? Copy a sibling in the target group, wire it in that group's
 - **`dates.ts` / `duration.ts`** — date filters, `"2h30m"` parsing/formatting;
   `parseLocalDate` (strict ISO, bare = local time) and `parseDurationMs` (`30m`/`2h`/`1d`)
   for the `status set` expiry flags; `parseDateOption` checks `YYYY-MM-DD` `--since`/`--until`
-  values; `formatDateInTimezone` gives an instant's `YYYY-MM-DD` day in the account's time zone
-  (from `getAccountTimezone`)
+  values. Days are the account's (see AGENTS.md): `formatDateInTimezone(new Date(), timezone)`
+  is the account's today, `dueDateDay` the day a `due.date` falls on, `addDays` calendar
+  arithmetic, `formatDateHeader` the Overdue/Today/Tomorrow heading and `formatDateTime` a
+  readable date and time, all given the zone from `getAccountTimezone()`
 - **`permissions.ts`** — collaborator permission parsing
 - **`help-center.ts`** — Help Center article search/fetch
 - **`progress.ts`** — `--progress-jsonl` JSONL event writer

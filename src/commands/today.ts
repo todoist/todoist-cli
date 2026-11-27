@@ -1,10 +1,10 @@
 import { outputIds, resolveOutputMode } from '@todoist/cli-core'
 import chalk from 'chalk'
 import { Command } from 'commander'
-import { getApi, type Project } from '../lib/api/core.js'
+import { getAccountTimezone, getApi, type Project } from '../lib/api/core.js'
 import { CollaboratorCache, formatAssignee } from '../lib/collaborators.js'
 import { CURSOR_DESCRIPTION } from '../lib/constants.js'
-import { getLocalDate, isDueBefore, isDueOnDate } from '../lib/dates.js'
+import { dueDateDay, formatDateInTimezone } from '../lib/dates.js'
 import type { PaginatedViewOptions } from '../lib/options.js'
 import {
     formatNextCursorFooter,
@@ -36,7 +36,8 @@ export async function showToday(options: TodayOptions): Promise<void> {
     const query = options.anyAssignee ? baseQuery : `(${baseQuery}) & (assigned to: me | !assigned)`
 
     const needsProjects = Boolean(options.workspace || options.personal || outputMode === 'human')
-    const [{ results: tasks, nextCursor }, projects] = await Promise.all([
+    // The API answers `today | overdue` by the account's day, so split the results by it too.
+    const [{ results: tasks, nextCursor }, projects, timezone] = await Promise.all([
         paginate(
             (cursor, limit) =>
                 api.getTasksByFilter({
@@ -47,9 +48,10 @@ export async function showToday(options: TodayOptions): Promise<void> {
             { limit: targetLimit, startCursor: options.cursor },
         ),
         needsProjects ? fetchProjects(api) : Promise.resolve(new Map<string, Project>()),
+        getAccountTimezone(),
     ])
 
-    const today = getLocalDate(0)
+    const today = formatDateInTimezone(new Date(), timezone)
 
     const filterResult = await filterByWorkspaceOrPersonal({
         api,
@@ -60,8 +62,10 @@ export async function showToday(options: TodayOptions): Promise<void> {
     })
     const filteredTasks = filterResult.tasks
 
-    const overdue = filteredTasks.filter((t) => t.due && isDueBefore(t.due.date, today))
-    const dueToday = filteredTasks.filter((t) => t.due && isDueOnDate(t.due.date, today))
+    const overdue = filteredTasks.filter((t) => t.due && dueDateDay(t.due.date, timezone) < today)
+    const dueToday = filteredTasks.filter(
+        (t) => t.due && dueDateDay(t.due.date, timezone) === today,
+    )
     const allTodayTasks = [...overdue, ...dueToday]
 
     if (outputMode === 'ids-only') {

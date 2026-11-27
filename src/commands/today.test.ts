@@ -1,9 +1,11 @@
 import { captureConsole, createTestProgram } from '@todoist/cli-core/testing'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/api/core.js', () => ({
     getApi: vi.fn(),
     getCurrentUserId: vi.fn().mockResolvedValue('current-user-123'),
+    // The same zone as the machine's, which the test run pins to UTC.
+    getAccountTimezone: vi.fn(async () => 'UTC'),
 }))
 
 vi.mock('../lib/api/workspaces.js', () => ({
@@ -15,6 +17,7 @@ vi.mock('../lib/markdown.js', () => ({
     renderMarkdown: vi.fn((text: string) => Promise.resolve(text)),
 }))
 
+import { getAccountTimezone } from '../lib/api/core.js'
 import { fetchWorkspaces, type Workspace } from '../lib/api/workspaces.js'
 import { preloadMarkdown } from '../lib/markdown.js'
 import { setupApiMock } from '../test-support/api-mock.js'
@@ -161,6 +164,71 @@ describe('today command', () => {
         await program.parseAsync(['node', 'td', 'today'])
 
         expect(consoleSpy).toHaveBeenCalledWith('No tasks due today.')
+    })
+
+    describe("the account's day", () => {
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it("lists a task due on the account's today under Today when the machine is a day ahead", async () => {
+            // 03:00 UTC on 25 November is still 9 PM on the 24th for an account in Chicago.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2026-11-25T03:00:00Z'))
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/Chicago')
+            mockApi.getTasksByFilter.mockResolvedValue({
+                results: [
+                    {
+                        id: 'task-1',
+                        content: 'Due today',
+                        projectId: 'proj-1',
+                        due: { date: '2026-11-24' },
+                    },
+                    {
+                        id: 'task-2',
+                        content: 'Due yesterday',
+                        projectId: 'proj-1',
+                        due: { date: '2026-11-23' },
+                    },
+                ],
+                nextCursor: null,
+            })
+
+            await createProgram().parseAsync(['node', 'td', 'today'])
+
+            const lines = consoleSpy.mock.calls
+                .map((call: unknown[]) => String(call[0]).split('\n')[0].trim())
+                .filter((line: string) => line !== '')
+            expect(lines.slice(0, 4)).toEqual([
+                'Overdue (1)',
+                'Due yesterday',
+                'Today (1)',
+                'Due today',
+            ])
+        })
+
+        it("keeps a task due on the account's today when the machine is a day behind", async () => {
+            // 20:00 UTC on 24 November is already 5 AM on the 25th for an account in Tokyo.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2026-11-24T20:00:00Z'))
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('Asia/Tokyo')
+            mockApi.getTasksByFilter.mockResolvedValue({
+                results: [
+                    {
+                        id: 'task-1',
+                        content: 'Due today',
+                        projectId: 'proj-1',
+                        due: { date: '2026-11-25' },
+                    },
+                ],
+                nextCursor: null,
+            })
+
+            await createProgram().parseAsync(['node', 'td', 'today', '--json'])
+
+            const parsed = JSON.parse(String(consoleSpy.mock.calls[0][0]))
+            expect(parsed.results.map((task: { id: string }) => task.id)).toEqual(['task-1'])
+        })
     })
 
     it('outputs JSON with --json flag', async () => {

@@ -1,11 +1,14 @@
 import { captureConsole, createTestProgram } from '@todoist/cli-core/testing'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../lib/api/core.js', () => ({
     getApi: vi.fn(),
     getCurrentUserId: vi.fn().mockResolvedValue('current-user-123'),
+    // The same zone as the machine's, which the test run pins to UTC.
+    getAccountTimezone: vi.fn(async () => 'UTC'),
 }))
 
+import { getAccountTimezone } from '../lib/api/core.js'
 import { setupApiMock } from '../test-support/api-mock.js'
 import { type MockApi } from '../test-support/mock-api.js'
 import { registerUpcomingCommand } from './upcoming.js'
@@ -335,6 +338,60 @@ describe('upcoming command', () => {
             .map((call: unknown[]) => String(call[0]).split('\n')[0].trim())
             .filter((line: string) => line.startsWith('Tomorrow') || line.endsWith(' task'))
         expect(lines).toEqual(['Tomorrow (3)', 'All-day task', 'Morning task', 'Evening task'])
+    })
+
+    describe("the account's day", () => {
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it("dates the headings by the account's today when the machine is a day ahead", async () => {
+            // 03:00 UTC on 25 November is still 9 PM on the 24th for an account in Chicago.
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2026-11-25T03:00:00Z'))
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/Chicago')
+            mockApi.getTasksByFilter.mockResolvedValue({
+                results: [
+                    {
+                        id: 'task-1',
+                        content: 'All-day task today',
+                        projectId: 'proj-1',
+                        due: { date: '2026-11-24' },
+                    },
+                    {
+                        // 02:00 UTC on the 25th is 8 PM on the 24th in Chicago.
+                        id: 'task-2',
+                        content: 'Fixed-time task today',
+                        projectId: 'proj-1',
+                        due: { date: '2026-11-25T02:00:00Z' },
+                    },
+                    {
+                        id: 'task-3',
+                        content: 'All-day task tomorrow',
+                        projectId: 'proj-1',
+                        due: { date: '2026-11-25' },
+                    },
+                ],
+                nextCursor: null,
+            })
+            mockApi.getProjects.mockResolvedValue({
+                results: [{ id: 'proj-1', name: 'Work' }],
+                nextCursor: null,
+            })
+
+            await createProgram().parseAsync(['node', 'td', 'upcoming'])
+
+            const lines = consoleSpy.mock.calls
+                .map((call: unknown[]) => String(call[0]).split('\n')[0].trim())
+                .filter((line: string) => /^(Overdue|Today|Tomorrow) \(|task/.test(line))
+            expect(lines).toEqual([
+                'Today (2)',
+                'All-day task today',
+                'Fixed-time task today',
+                'Tomorrow (1)',
+                'All-day task tomorrow',
+            ])
+        })
     })
 
     it('rejects invalid days argument', async () => {

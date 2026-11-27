@@ -1,13 +1,4 @@
-import { isBefore } from 'date-fns/isBefore'
-import { isEqual } from 'date-fns/isEqual'
-import { parseISO } from 'date-fns/parseISO'
 import { CliError } from './errors.js'
-
-export function getLocalDate(daysOffset = 0): string {
-    const date = new Date()
-    date.setDate(date.getDate() + daysOffset)
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
 
 const TODOIST_FIXED_OFFSET = /^GMT ([+-])(\d{1,2}):(\d{2})$/
 
@@ -91,38 +82,41 @@ export function parseDateOption(value: string, option: '--since' | '--until'): n
     return timestamp
 }
 
+// A time with `Z` or an offset is a fixed instant; without one it is a floating wall-clock time.
+const FIXED_INSTANT = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i
+
 /**
- * Parse a due date string (handles both date-only and datetime formats)
- * and return a Date object set to start of day for date comparison
+ * The `YYYY-MM-DD` day a task's `due.date` falls on for the account, given the account's
+ * `timeZone`. A date, or a floating time such as `2026-01-29T18:00:00`, is already on the
+ * account's clock, so its own date is the day. A fixed time such as `2026-01-29T02:00:00Z` is an
+ * instant, placed on the day it falls on in `timeZone`.
  */
-export function parseDueDateToDay(dateStr: string): Date {
-    const parsed = parseISO(dateStr)
-    return new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()))
+export function dueDateDay(dueDate: string, timeZone?: string): string {
+    if (FIXED_INSTANT.test(dueDate)) return formatDateInTimezone(new Date(dueDate), timeZone)
+    return dueDate.slice(0, 10)
+}
+
+/** The `YYYY-MM-DD` day `days` calendar days after `day`, or before it when `days` is negative. */
+export function addDays(day: string, days: number): string {
+    const [year, month, date] = day.split('-').map(Number)
+    const result = new Date(Date.UTC(year, month - 1, date + days))
+    return [
+        String(result.getUTCFullYear()).padStart(4, '0'),
+        String(result.getUTCMonth() + 1).padStart(2, '0'),
+        String(result.getUTCDate()).padStart(2, '0'),
+    ].join('-')
 }
 
 /**
- * Check if a due date is on a specific day
+ * The heading for a `YYYY-MM-DD` day in a list of tasks: `Overdue`, `Today`, `Tomorrow`, or the
+ * date such as `Feb 3`. `today` is the account's today.
  */
-export function isDueOnDate(dueDate: string, targetDate: string): boolean {
-    return isEqual(parseDueDateToDay(dueDate), parseDueDateToDay(targetDate))
-}
-
-/**
- * Check if a due date is before a specific day
- */
-export function isDueBefore(dueDate: string, targetDate: string): boolean {
-    return isBefore(parseDueDateToDay(dueDate), parseDueDateToDay(targetDate))
-}
-
-export function formatDateHeader(dateStr: string, today: string): string {
-    if (isDueBefore(dateStr, today)) return 'Overdue'
-    if (isDueOnDate(dateStr, today)) return 'Today'
-    const tomorrow = getLocalDate(1)
-    if (isDueOnDate(dateStr, tomorrow)) return 'Tomorrow'
-    // Extract just the date part (YYYY-MM-DD) in case dateStr contains a time
-    const dateOnly = dateStr.split('T')[0]
-    const [year, month, day] = dateOnly.split('-').map(Number)
-    return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+export function formatDateHeader(day: string, today: string): string {
+    if (day < today) return 'Overdue'
+    if (day === today) return 'Today'
+    if (day === addDays(today, 1)) return 'Tomorrow'
+    const [year, month, date] = day.split('-').map(Number)
+    return new Date(year, month - 1, date).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
     })

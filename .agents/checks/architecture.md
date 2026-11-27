@@ -13,6 +13,7 @@ Rules lint and types can't express. Most are written in `AGENTS.md` and `CODEBAS
 - A positional context argument (project, task, workspace) without its named flag alias, or one that accepts both without an error.
 - A new top-level command not wired into the lazy registry in `src/index.ts`.
 - A barrel file, or a helper that duplicates one in `src/lib/` or `@todoist/cli-core`. Where cli-core has a convention, the CLI follows it.
+- A day the user sees (today, overdue, the day a task, comment or completion falls on) worked out from the machine's clock or from UTC instead of the account's time zone (`getAccountTimezone()` and the helpers in `src/lib/dates.ts`).
 
 ## Fine
 
