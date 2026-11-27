@@ -909,6 +909,47 @@ describe('comment view', () => {
         expect(consoleSpy).toHaveBeenCalledWith('Posted:   Jan 8, 2026, 8:00 PM')
     })
 
+    it('looks the time zone up while the comment loads', async () => {
+        let deliverComment: (comment: unknown) => void = () => {}
+        mockApi.getComment.mockReturnValue(
+            new Promise((resolve) => {
+                deliverComment = resolve
+            }),
+        )
+        captureConsole()
+
+        const run = createProgram().parseAsync(['node', 'td', 'comment', 'view', 'id:comment-1'])
+        await vi.waitFor(() => expect(getAccountTimezone).toHaveBeenCalled())
+        deliverComment({
+            id: 'comment-1',
+            content: 'Note',
+            postedAt: new Date('2026-01-09T02:00:00Z'),
+            taskId: 'task-1',
+        })
+        await run
+    })
+
+    it('does not look the time zone up for --json', async () => {
+        mockApi.getComment.mockResolvedValue({
+            id: 'comment-1',
+            content: 'Note',
+            postedAt: new Date('2026-01-09T02:00:00Z'),
+            taskId: 'task-1',
+        })
+        captureConsole()
+
+        await createProgram().parseAsync([
+            'node',
+            'td',
+            'comment',
+            'view',
+            'id:comment-1',
+            '--json',
+        ])
+
+        expect(getAccountTimezone).not.toHaveBeenCalled()
+    })
+
     describe('the Notified line', () => {
         async function viewComment() {
             const program = createProgram()

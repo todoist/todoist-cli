@@ -31,7 +31,12 @@ const IMAGE_HINT =
 export async function viewComment(commentId: string, options: ViewOptions): Promise<void> {
     const api = await getApi()
     const id = lenientIdRef(commentId, 'comment')
-    const comment = await api.getComment(id)
+    // The posted time is shown in the account's time zone, so look the zone up while the
+    // comment loads. `--json` prints the raw timestamp and needs no lookup.
+    const [comment, timezone] = await Promise.all([
+        api.getComment(id),
+        options.json ? undefined : getAccountTimezone(),
+    ])
 
     if (options.json) {
         console.log(formatJson(comment, 'comment', options.full, true))
@@ -50,7 +55,7 @@ export async function viewComment(commentId: string, options: ViewOptions): Prom
     console.log(chalk.bold('Comment'))
     console.log('')
     console.log(`ID:       ${comment.id}`)
-    console.log(`Posted:   ${formatDateTime(comment.postedAt, await getAccountTimezone())}`)
+    console.log(`Posted:   ${formatDateTime(comment.postedAt, timezone)}`)
     if (comment.uidsToNotify?.length) {
         console.log(`Notified: ${await describeNotified(api, comment)}`)
     }
