@@ -93,7 +93,7 @@ Resolution order: \`--user <ref>\` > \`TD_USER\` > \`user.defaultUser\` from con
 
 - Daily views: \`td today\`, \`td inbox\`, \`td upcoming\`, \`td completed\`, \`td activity\`
 - Task lifecycle: \`td task list/view/add/add-many/quickadd/update/reschedule/move/complete/uncomplete/delete/browse\` (alias: \`td task qa\` for \`quickadd\`)
-- Projects: \`td project list/view/create/update/archive/unarchive/archived/delete/move/reorder/join/share/browse/collaborators/permissions/export/import\`
+- Projects: \`td project list/view/create/update/archive/unarchive/archived/delete/move/reorder/join/share/browse/collaborators/permissions/export/import/save-as-template\`
 - Project analytics: \`td project progress/health/activity-stats/analyze-health\`
 - Organization: \`td label ...\`, \`td filter ...\`, \`td section ...\`, \`td folder ...\`, \`td workspace ...\`
 - Collaboration: \`td comment ...\`, \`td notification ...\`, \`td reminder ...\`
@@ -232,6 +232,8 @@ td project export "Roadmap" --relative-dates --json
 td project import "Roadmap" --from-csv roadmap.csv     # like the app's "Import from CSV"
 td project import "Roadmap" --from-csv roadmap.csv --file-name "Q2 plan.csv"
 td project import "Roadmap" --from-template product-launch --locale fr   # a gallery slug or a UT_ template ID
+td project save-as-template "Onboarding" --description "Steps for a new hire"   # name and color default to the project's
+td project save-as-template "Team plan" --name "Sprint" --description "Two-week sprint" --color lime_green --for-workspace
 td workspace list
 td workspace view "Acme"
 td workspace projects "Acme"
@@ -364,7 +366,7 @@ td hc view https://www.todoist.com/help/articles/introduction-to-filters-V98wIH
 td template export-url "Roadmap"
 \`\`\`
 
-Commands that read or change a project live under \`td project\`: \`export\` (CSV), \`import --from-csv\`/\`--from-template\` into an existing project, and \`create --from-csv\`/\`--from-template\` for a new one. Templates are gallery slugs (\`product-launch\`) or saved \`UT_\` IDs. With a \`--from-…\` option, \`td project create\` only takes \`--name\` (required with \`--from-csv\`), \`--workspace\`, \`--file-name\` (CSV only), and \`--locale\` and \`--folder\` (template only; \`--folder\` needs \`--workspace\`); set the color, parent and the rest afterwards with \`td project update\`. The old \`td template export-file\`, \`import-file\`, \`import-id\` and \`create --file\` still work for one release, with a deprecation warning on stderr.
+Commands that read or change a project live under \`td project\`: \`export\` (CSV), \`import --from-csv\`/\`--from-template\` into an existing project, and \`create --from-csv\`/\`--from-template\` for a new one. Templates are gallery slugs (\`product-launch\`) or saved \`UT_\` IDs. With a \`--from-…\` option, \`td project create\` only takes \`--name\` (required with \`--from-csv\`), \`--workspace\`, \`--file-name\` (CSV only), and \`--locale\` and \`--folder\` (template only; \`--folder\` needs \`--workspace\`); set the color, parent and the rest afterwards with \`td project update\`. \`td project save-as-template\` saves a new template on every run, and templates can't be deleted from the CLI yet, so confirm the name and description with the user before running it. \`--for-workspace\` saves a workspace project's template to that workspace, keeping assignees; otherwise it goes to the user's personal templates. The old \`td template export-file\`, \`import-file\`, \`import-id\` and \`create --file\` still work for one release, with a deprecation warning on stderr.
 
 ### Backups
 \`\`\`bash
