@@ -1,7 +1,6 @@
 import { outputIds, resolveOutputMode } from '@todoist/cli-core'
 import chalk from 'chalk'
 import { Command } from 'commander'
-import { parseISO } from 'date-fns/parseISO'
 import { getAccountTimezone, getApi, type Task } from '../lib/api/core.js'
 import { CollaboratorCache, formatAssignee } from '../lib/collaborators.js'
 import { CURSOR_DESCRIPTION } from '../lib/constants.js'
@@ -16,6 +15,7 @@ import {
 } from '../lib/output.js'
 import { LIMITS, paginate } from '../lib/pagination.js'
 import { fetchProjects, filterByWorkspaceOrPersonal } from '../lib/task-list.js'
+import { DEFAULT_TASK_SORT, sortTasks } from '../lib/task-sort.js'
 
 interface UpcomingOptions extends PaginatedViewOptions {
     anyAssignee?: boolean
@@ -71,7 +71,12 @@ export async function showUpcoming(
         prefetchedProjects: projects,
     })
 
-    const relevantTasks = filterResult.tasks
+    // List tasks the way the Todoist apps list Today and Upcoming: by day, oldest first, all-day
+    // tasks before timed ones, then by priority, deadline and the order set by hand.
+    const relevantTasks = sortTasks(filterResult.tasks, DEFAULT_TASK_SORT, {
+        timezone,
+        dateDriven: true,
+    })
 
     if (outputMode === 'ids-only') {
         outputIds(relevantTasks, (task) => task.id, formatNextCursorNotice(nextCursor))
@@ -154,8 +159,6 @@ export async function showUpcoming(
     for (const date of sortedDates) {
         const dateTasks = byDate.get(date)
         if (!dateTasks) continue // Should not happen since date comes from keys()
-        // The API returns tasks in the order they were created; list the day's by due time.
-        dateTasks.sort((a, b) => dueTime(a) - dueTime(b))
         const header = formatDateHeader(date, today)
         console.log(chalk.bold(`${header} (${dateTasks.length})`))
         for (const task of dateTasks) {
@@ -178,12 +181,6 @@ export async function showUpcoming(
     }
 
     console.log(formatNextCursorFooter(nextCursor))
-}
-
-// A due date without a time reads as midnight, so all-day tasks come before timed ones.
-// A time with a `Z` is a fixed instant; one without is the machine's local time.
-function dueTime(task: Task): number {
-    return task.due ? parseISO(task.due.date).getTime() : 0
 }
 
 export function registerUpcomingCommand(program: Command): void {

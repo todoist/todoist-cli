@@ -15,6 +15,7 @@ import {
 } from '../lib/output.js'
 import { LIMITS, paginate } from '../lib/pagination.js'
 import { fetchProjects, filterByWorkspaceOrPersonal } from '../lib/task-list.js'
+import { DEFAULT_TASK_SORT, sortTasks } from '../lib/task-sort.js'
 
 interface TodayOptions extends PaginatedViewOptions {
     anyAssignee?: boolean
@@ -60,7 +61,12 @@ export async function showToday(options: TodayOptions): Promise<void> {
         personal: options.personal,
         prefetchedProjects: projects,
     })
-    const filteredTasks = filterResult.tasks
+    // List tasks the way the Todoist apps list Today and Upcoming: by day, oldest first, all-day
+    // tasks before timed ones, then by priority, deadline and the order set by hand.
+    const filteredTasks = sortTasks(filterResult.tasks, DEFAULT_TASK_SORT, {
+        timezone,
+        dateDriven: true,
+    })
 
     const overdue = filteredTasks.filter((t) => t.due && dueDateDay(t.due.date, timezone) < today)
     const dueToday = filteredTasks.filter(

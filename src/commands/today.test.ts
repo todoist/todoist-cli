@@ -231,6 +231,90 @@ describe('today command', () => {
         })
     })
 
+    describe('order', () => {
+        // The API returns tasks in the order they were created.
+        const tasksInCreationOrder = [
+            {
+                id: 'task-1',
+                content: 'Plain task',
+                projectId: 'proj-1',
+                priority: 1,
+                due: { date: '2026-11-24' },
+            },
+            {
+                id: 'task-2',
+                content: 'Urgent task',
+                projectId: 'proj-1',
+                priority: 4,
+                due: { date: '2026-11-24' },
+            },
+            {
+                id: 'task-3',
+                content: 'Morning call',
+                projectId: 'proj-1',
+                priority: 4,
+                due: { date: '2026-11-24T09:00:00' },
+            },
+            {
+                id: 'task-4',
+                content: 'Recent overdue',
+                projectId: 'proj-1',
+                priority: 1,
+                due: { date: '2026-11-23' },
+            },
+            {
+                id: 'task-5',
+                content: 'Old overdue',
+                projectId: 'proj-1',
+                priority: 1,
+                due: { date: '2026-11-20' },
+            },
+        ]
+
+        beforeEach(() => {
+            vi.useFakeTimers({ toFake: ['Date'] })
+            vi.setSystemTime(new Date('2026-11-24T12:00:00Z'))
+            mockApi.getTasksByFilter.mockResolvedValue({
+                results: tasksInCreationOrder,
+                nextCursor: null,
+            })
+        })
+
+        afterEach(() => {
+            vi.useRealTimers()
+        })
+
+        it('lists each section the way the Todoist apps do: oldest first, all-day before timed, then priority', async () => {
+            await createProgram().parseAsync(['node', 'td', 'today'])
+
+            const lines = consoleSpy.mock.calls
+                .map((call: unknown[]) => String(call[0]).split('\n')[0].trim())
+                .filter((line: string) => line !== '')
+            expect(lines.slice(0, 7)).toEqual([
+                'Overdue (2)',
+                'Old overdue',
+                'Recent overdue',
+                'Today (3)',
+                'Urgent task',
+                'Plain task',
+                'Morning call',
+            ])
+        })
+
+        it('uses the same order for --json', async () => {
+            await createProgram().parseAsync(['node', 'td', 'today', '--json'])
+
+            const parsed = JSON.parse(String(consoleSpy.mock.calls[0][0]))
+            expect(parsed.results.map((task: { id: string }) => task.id)).toEqual([
+                'task-5',
+                'task-4',
+                'task-2',
+                'task-1',
+                'task-3',
+            ])
+        })
+    })
+
     it('outputs JSON with --json flag', async () => {
         const program = createProgram()
 
