@@ -16,6 +16,7 @@ import { deleteProject } from './delete.js'
 import { exportProject, type ExportOptions } from './export.js'
 import { showProjectHealth } from './health.js'
 import { ICON_CHOICES, VIEW_STYLE_CHOICES } from './helpers.js'
+import { importIntoProject, type ImportOptions } from './import.js'
 import { joinProjectCmd } from './join.js'
 import { listProjects } from './list.js'
 import { moveProject } from './move.js'
@@ -197,6 +198,38 @@ Examples:
                 return
             }
             return exportProject(projectRef, options)
+        })
+
+    const importCmd = project
+        .command('import [ref]')
+        .description('Import a CSV file or a template into an existing project')
+        .option('--project <ref>', 'Project reference (name or id:xxx)')
+        .option('--from-csv <path>', 'CSV file to import, like the app\'s "Import from CSV"')
+        .option('--from-template <id>', 'Template to import: a gallery slug or a UT_ template ID')
+        .option('--file-name <name>', 'Override the file name sent to the API (--from-csv only)')
+        .option('--locale <locale>', 'Language of the template content (--from-template only)')
+        .option('--json', 'Output as JSON')
+        .option('--dry-run', 'Preview what would happen without executing')
+        .addHelpText(
+            'after',
+            `
+Examples:
+  td project import "Roadmap" --from-csv roadmap.csv
+  td project import "Roadmap" --from-template product-launch --locale fr`,
+        )
+        .action((ref: string | undefined, options: ImportOptions) => {
+            if (ref && options.project) {
+                throw new CliError(
+                    'CONFLICTING_OPTIONS',
+                    'Cannot specify project both as argument and --project flag',
+                )
+            }
+            const projectRef = ref || options.project
+            if (!projectRef) {
+                failWithUsage(importCmd)
+                return
+            }
+            return importIntoProject(projectRef, options)
         })
 
     const archiveCmd = project

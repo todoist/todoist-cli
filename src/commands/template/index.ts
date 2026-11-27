@@ -2,11 +2,10 @@ import { Command } from 'commander'
 import { CliError } from '../../lib/errors.js'
 import { failWithUsage } from '../../lib/missing-argument.js'
 import { exportProject, type ExportOptions } from '../project/export.js'
+import { importIntoProject } from '../project/import.js'
 import { createFromTemplate, type CreateFromTemplateOptions } from './create.js'
 import { exportTemplateUrl, type ExportUrlOptions } from './export-url.js'
 import { warnDeprecated } from './helpers.js'
-import { importTemplateFile, type ImportFileOptions } from './import-file.js'
-import { importTemplateById, type ImportIdOptions } from './import-id.js'
 
 export function registerTemplateCommand(program: Command): void {
     const template = program
@@ -71,49 +70,69 @@ export function registerTemplateCommand(program: Command): void {
             return createFromTemplate(options)
         })
 
+    // Deprecated: moved to `td project import --from-csv`. Hidden, kept for one release.
     const importFileCmd = template
-        .command('import-file [project]')
-        .description('Import a template file into an existing project')
+        .command('import-file [project]', { hidden: true })
+        .description('Deprecated: use `td project import --from-csv`')
         .option('--project <ref>', 'Project reference (name or id:xxx)')
-        .requiredOption('--file <path>', 'Path to the template file')
+        .requiredOption('--file <path>', 'Path to the CSV file')
         .option('--file-name <name>', 'Override the file name sent to the API')
         .option('--json', 'Output as JSON')
         .option('--dry-run', 'Preview what would happen without executing')
-        .action((projectArg: string | undefined, options: ImportFileOptions) => {
-            if (projectArg && options.project) {
-                throw new CliError(
-                    'CONFLICTING_OPTIONS',
-                    'Cannot specify project both as argument and --project flag',
-                )
-            }
-            const ref = projectArg || options.project
+        .action((projectArg: string | undefined, options: DeprecatedImportFileOptions) => {
+            warnDeprecated('td template import-file', 'td project import --from-csv')
+            const ref = projectRefFrom(projectArg, options.project)
             if (!ref) {
                 failWithUsage(importFileCmd)
                 return
             }
-            return importTemplateFile(ref, options)
+            const { file, ...rest } = options
+            return importIntoProject(ref, { ...rest, fromCsv: file })
         })
 
+    // Deprecated: moved to `td project import --from-template`. Hidden, kept for one release.
     const importIdCmd = template
-        .command('import-id [project]')
-        .description('Import a template by ID into an existing project')
+        .command('import-id [project]', { hidden: true })
+        .description('Deprecated: use `td project import --from-template`')
         .option('--project <ref>', 'Project reference (name or id:xxx)')
         .requiredOption('--template-id <id>', 'The template ID to import')
         .option('--locale <locale>', 'Locale for the import (default: en)')
         .option('--json', 'Output as JSON')
         .option('--dry-run', 'Preview what would happen without executing')
-        .action((projectArg: string | undefined, options: ImportIdOptions) => {
-            if (projectArg && options.project) {
-                throw new CliError(
-                    'CONFLICTING_OPTIONS',
-                    'Cannot specify project both as argument and --project flag',
-                )
-            }
-            const ref = projectArg || options.project
+        .action((projectArg: string | undefined, options: DeprecatedImportIdOptions) => {
+            warnDeprecated('td template import-id', 'td project import --from-template')
+            const ref = projectRefFrom(projectArg, options.project)
             if (!ref) {
                 failWithUsage(importIdCmd)
                 return
             }
-            return importTemplateById(ref, options)
+            const { templateId, ...rest } = options
+            return importIntoProject(ref, { ...rest, fromTemplate: templateId })
         })
+}
+
+interface DeprecatedImportFileOptions {
+    project?: string
+    file: string
+    fileName?: string
+    json?: boolean
+    dryRun?: boolean
+}
+
+interface DeprecatedImportIdOptions {
+    project?: string
+    templateId: string
+    locale?: string
+    json?: boolean
+    dryRun?: boolean
+}
+
+function projectRefFrom(projectArg: string | undefined, projectOption: string | undefined) {
+    if (projectArg && projectOption) {
+        throw new CliError(
+            'CONFLICTING_OPTIONS',
+            'Cannot specify project both as argument and --project flag',
+        )
+    }
+    return projectArg || projectOption
 }

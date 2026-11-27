@@ -293,186 +293,42 @@ describe('template', () => {
         })
     })
 
-    describe('import-file', () => {
+    describe('import-file and import-id (deprecated)', () => {
+        let stderrSpy: ReturnType<typeof vi.spyOn>
+
         beforeEach(() => {
             vi.mocked(open).mockResolvedValue({ close: vi.fn() } as unknown as Awaited<
                 ReturnType<typeof open>
             >)
-            vi.mocked(fs.openAsBlob).mockResolvedValue(new Blob([Buffer.from('template content')]))
+            vi.mocked(fs.openAsBlob).mockResolvedValue(new Blob([Buffer.from('csv content')]))
+            stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
         })
 
-        it('imports template file into project', async () => {
-            const program = createProgram()
-            mockApi.importCsvIntoProject.mockResolvedValue({
-                status: 'ok',
-                templateType: 'project',
-                projects: [],
-                sections: [],
-                tasks: [fixtures.tasks.basic],
-                comments: [],
-            })
-
-            await program.parseAsync([
+        it('import-file still imports the CSV, and warns to use td project import --from-csv', async () => {
+            await createProgram().parseAsync([
                 'node',
                 'td',
                 'template',
                 'import-file',
                 'Work',
                 '--file',
-                '/tmp/template.csv',
-            ])
-
-            expect(mockResolveProjectRef).toHaveBeenCalledWith(mockApi, 'Work')
-            const importArg = mockApi.importCsvIntoProject.mock.calls[0][0]
-            expect(importArg).toMatchObject({
-                projectId: fixtures.projects.work.id,
-                fileName: 'template.csv',
-            })
-            expect(importArg.file).toBeInstanceOf(Blob)
-            expect(await (importArg.file as Blob).text()).toBe('template content')
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('1 tasks'))
-        })
-
-        it('forwards --file-name to api.importCsvIntoProject (overrides basename)', async () => {
-            const program = createProgram()
-            mockApi.importCsvIntoProject.mockResolvedValue({
-                status: 'ok',
-                templateType: 'project',
-                projects: [],
-                sections: [],
-                tasks: [],
-                comments: [],
-            })
-
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'import-file',
-                'Work',
-                '--file',
-                '/tmp/template.csv',
+                '/tmp/roadmap.csv',
                 '--file-name',
-                'override.csv',
+                'Q2 plan.csv',
             ])
 
-            const importArg = mockApi.importCsvIntoProject.mock.calls[0][0]
-            expect(importArg.fileName).toBe('override.csv')
-        })
-
-        it('outputs JSON with --json', async () => {
-            const program = createProgram()
-            mockApi.importCsvIntoProject.mockResolvedValue({
-                status: 'ok',
-                templateType: 'project',
-                projects: [],
-                sections: [],
-                tasks: [],
-                comments: [],
-            })
-
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'import-file',
-                'Work',
-                '--file',
-                '/tmp/template.csv',
-                '--json',
-            ])
-
-            const output = consoleSpy.mock.calls[0][0] as string
-            const parsed = JSON.parse(output)
-            expect(parsed.status).toBe('ok')
-        })
-
-        it('shows dry-run preview', async () => {
-            const program = createProgram()
-
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'import-file',
-                'Work',
-                '--file',
-                '/tmp/template.csv',
-                '--dry-run',
-            ])
-
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[dry-run]'))
-            expect(mockApi.importCsvIntoProject).not.toHaveBeenCalled()
-        })
-
-        it('errors with FILE_NOT_FOUND when the --file path does not exist', async () => {
-            const program = createProgram()
-            vi.mocked(open).mockRejectedValue(
-                Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
-            )
-
-            await expect(
-                program.parseAsync([
-                    'node',
-                    'td',
-                    'template',
-                    'import-file',
-                    'Work',
-                    '--file',
-                    '/tmp/nonexistent.csv',
-                ]),
-            ).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' })
-            // File validation runs before any API/ref work — if a
-            // future change reorders that, these mocks would record a
-            // call and this test would catch the regression.
-            expect(mockGetApi).not.toHaveBeenCalled()
-            expect(mockResolveProjectRef).not.toHaveBeenCalled()
-        })
-    })
-
-    describe('import-id', () => {
-        it('imports template by ID into project', async () => {
-            const program = createProgram()
-            mockApi.importTemplateFromId.mockResolvedValue({
-                status: 'ok',
-                templateType: 'project',
-                projects: [],
-                sections: [],
-                tasks: [fixtures.tasks.basic, fixtures.tasks.withDue],
-                comments: [],
-            })
-
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'import-id',
-                'Work',
-                '--template-id',
-                'product-launch',
-            ])
-
-            expect(mockResolveProjectRef).toHaveBeenCalledWith(mockApi, 'Work')
-            expect(mockApi.importTemplateFromId).toHaveBeenCalledWith({
+            expect(mockApi.importCsvIntoProject.mock.calls[0][0]).toMatchObject({
                 projectId: fixtures.projects.work.id,
-                templateId: 'product-launch',
-                locale: undefined,
+                fileName: 'Q2 plan.csv',
             })
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('2 tasks'))
+            expect(stderrSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Warning:'),
+                expect.stringContaining('Use `td project import --from-csv` instead.'),
+            )
         })
 
-        it('passes locale option', async () => {
-            const program = createProgram()
-            mockApi.importTemplateFromId.mockResolvedValue({
-                status: 'ok',
-                templateType: 'project',
-                projects: [],
-                sections: [],
-                tasks: [],
-                comments: [],
-            })
-
-            await program.parseAsync([
+        it('import-id still imports the template, and warns to use td project import --from-template', async () => {
+            await createProgram().parseAsync([
                 'node',
                 'td',
                 'template',
@@ -489,51 +345,16 @@ describe('template', () => {
                 templateId: 'product-launch',
                 locale: 'fr',
             })
+            expect(stderrSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Warning:'),
+                expect.stringContaining('Use `td project import --from-template` instead.'),
+            )
         })
 
-        it('outputs JSON with --json', async () => {
-            const program = createProgram()
-            mockApi.importTemplateFromId.mockResolvedValue({
-                status: 'ok',
-                templateType: 'project',
-                projects: [],
-                sections: [],
-                tasks: [],
-                comments: [],
-            })
+        it('are hidden from td template --help', () => {
+            const template = createProgram().commands.find((c) => c.name() === 'template')!
 
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'import-id',
-                'Work',
-                '--template-id',
-                'test-id',
-                '--json',
-            ])
-
-            const output = consoleSpy.mock.calls[0][0] as string
-            const parsed = JSON.parse(output)
-            expect(parsed.status).toBe('ok')
-        })
-
-        it('shows dry-run preview', async () => {
-            const program = createProgram()
-
-            await program.parseAsync([
-                'node',
-                'td',
-                'template',
-                'import-id',
-                'Work',
-                '--template-id',
-                'test-id',
-                '--dry-run',
-            ])
-
-            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[dry-run]'))
-            expect(mockApi.importTemplateFromId).not.toHaveBeenCalled()
+            expect(template.helpInformation()).not.toMatch(/import-file|import-id/)
         })
     })
 })

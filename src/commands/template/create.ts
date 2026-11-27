@@ -4,7 +4,7 @@ import { CliError } from '../../lib/errors.js'
 import { openLocalFileAsBlob } from '../../lib/local-file.js'
 import { printDryRun } from '../../lib/output.js'
 import { resolveWorkspaceRef } from '../../lib/refs.js'
-import { formatImportResult } from './helpers.js'
+import { formatImportResult } from '../project/import.js'
 
 export interface CreateFromTemplateOptions {
     name: string
