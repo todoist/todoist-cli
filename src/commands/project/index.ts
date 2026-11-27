@@ -13,6 +13,7 @@ import { browseProject } from './browse.js'
 import { listCollaborators } from './collaborators.js'
 import { createProject } from './create.js'
 import { deleteProject } from './delete.js'
+import { exportProject, type ExportOptions } from './export.js'
 import { showProjectHealth } from './health.js'
 import { ICON_CHOICES, VIEW_STYLE_CHOICES } from './helpers.js'
 import { joinProjectCmd } from './join.js'
@@ -167,6 +168,35 @@ Examples:
                 return
             }
             return updateProject(ref, options)
+        })
+
+    const exportCmd = project
+        .command('export [ref]')
+        .description('Export a project as a CSV file, like the app\'s "Export as CSV"')
+        .option('--project <ref>', 'Project reference (name or id:xxx)')
+        .option('--relative-dates', 'Use relative dates in the export')
+        .option('--output <path>', 'Write to file instead of stdout')
+        .option('--json', 'Output as JSON')
+        .addHelpText(
+            'after',
+            `
+Examples:
+  td project export "Roadmap" --output roadmap.csv
+  td project export "Roadmap" --relative-dates > roadmap.csv`,
+        )
+        .action((ref: string | undefined, options: ExportOptions) => {
+            if (ref && options.project) {
+                throw new CliError(
+                    'CONFLICTING_OPTIONS',
+                    'Cannot specify project both as argument and --project flag',
+                )
+            }
+            const projectRef = ref || options.project
+            if (!projectRef) {
+                failWithUsage(exportCmd)
+                return
+            }
+            return exportProject(projectRef, options)
         })
 
     const archiveCmd = project

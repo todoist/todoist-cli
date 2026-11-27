@@ -99,7 +99,7 @@ const API_SPINNER_MESSAGES: Record<string, { text: string; color?: 'blue' | 'gre
         updateWorkspace: { text: 'Updating workspace...', color: 'yellow' },
         deleteWorkspace: { text: 'Deleting workspace...', color: 'yellow' },
         analyzeProjectHealth: { text: 'Analyzing project health...', color: 'green' },
-        exportProjectAsCsv: { text: 'Exporting template...', color: 'blue' },
+        exportProjectAsCsv: { text: 'Exporting project as CSV...', color: 'blue' },
         exportTemplateAsUrl: { text: 'Exporting template URL...', color: 'blue' },
         addProjectFromCsv: { text: 'Creating project from template...', color: 'green' },
         importCsvIntoProject: { text: 'Importing template...', color: 'green' },

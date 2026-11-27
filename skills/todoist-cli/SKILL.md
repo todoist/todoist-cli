@@ -96,7 +96,7 @@ Resolution order: `--user <ref>` > `TD_USER` > `user.defaultUser` from config > 
 
 - Daily views: `td today`, `td inbox`, `td upcoming`, `td completed`, `td activity`
 - Task lifecycle: `td task list/view/add/add-many/quickadd/update/reschedule/move/complete/uncomplete/delete/browse` (alias: `td task qa` for `quickadd`)
-- Projects: `td project list/view/create/update/archive/unarchive/archived/delete/move/reorder/join/share/browse/collaborators/permissions`
+- Projects: `td project list/view/create/update/archive/unarchive/archived/delete/move/reorder/join/share/browse/collaborators/permissions/export`
 - Project analytics: `td project progress/health/activity-stats/analyze-health`
 - Organization: `td label ...`, `td filter ...`, `td section ...`, `td folder ...`, `td workspace ...`
 - Collaboration: `td comment ...`, `td notification ...`, `td reminder ...`
@@ -227,6 +227,8 @@ td project activity-stats "Roadmap" --weeks 4 --include-weekly
 td project analyze-health "Roadmap"
 td project archived-count --workspace "Acme"
 td project permissions
+td project export "Roadmap" --output roadmap.csv       # like the app's "Export as CSV"; stdout without --output
+td project export "Roadmap" --relative-dates --json
 td workspace list
 td workspace view "Acme"
 td workspace projects "Acme"
@@ -356,7 +358,6 @@ td hc view https://www.todoist.com/help/articles/introduction-to-filters-V98wIH
 
 ### Templates
 ```bash
-td template export-file "Roadmap" --output template.csv
 td template export-url "Roadmap"
 td template create --name "New Project" --file template.csv --workspace "Acme"
 td template create --name "New Project" --file template.csv --file-name "Q2 plan.csv"
