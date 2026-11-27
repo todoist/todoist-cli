@@ -160,6 +160,10 @@ export function createMockApi(overrides: Partial<TodoistApi> = {}): MockApi {
         addProjectFromTemplateId: vi.fn().mockResolvedValue({ status: 'ok', projectId: '' }),
         saveProjectAsTemplate: vi.fn(),
         addTemplate: vi.fn(),
+        getTemplates: vi.fn().mockResolvedValue({ results: [], nextCursor: null }),
+        getTemplate: vi.fn(),
+        getTemplateContent: vi.fn(),
+        updateTemplate: vi.fn(),
         importTemplateFromId: vi.fn().mockResolvedValue({
             status: 'ok',
             templateType: 'project',

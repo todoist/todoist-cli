@@ -1,6 +1,7 @@
 import { type ColorKey, colors } from '@todoist/sdk'
 import { Command, Option } from 'commander'
 import { withCaseInsensitiveChoices } from '../../lib/completion.js'
+import { CURSOR_DESCRIPTION } from '../../lib/constants.js'
 import { CliError } from '../../lib/errors.js'
 import { failWithUsage } from '../../lib/missing-argument.js'
 import { exportProject, type ExportOptions } from '../project/export.js'
@@ -9,6 +10,9 @@ import { createTemplateFromCsv } from './create-from-csv.js'
 import { createFromTemplate } from './create.js'
 import { exportTemplateUrl, type ExportUrlOptions } from './export-url.js'
 import { warnDeprecated } from './helpers.js'
+import { listTemplates, TEMPLATE_SOURCE_CHOICES, type ListTemplatesOptions } from './list.js'
+import { updateTemplate, type UpdateTemplateOptions } from './update.js'
+import { viewTemplate, type ViewTemplateOptions } from './view.js'
 
 export function registerTemplateCommand(program: Command): void {
     const template = program
@@ -21,6 +25,70 @@ To use a template, see:
   td project create --from-template <id>             Create a project from a template
   td project import <project> --from-template <id>   Add a template to an existing project`,
         )
+
+    template
+        .command('list')
+        .description("List templates: yours, your workspaces' and the gallery's")
+        .option('--search <query>', 'Search template names and descriptions')
+        .addOption(
+            withCaseInsensitiveChoices(
+                new Option('--source <source>', 'Where to list templates from (default: all)'),
+                [...TEMPLATE_SOURCE_CHOICES],
+            ),
+        )
+        .option('--category <slug>', 'Gallery category')
+        .option('--locale <locale>', 'Language of gallery templates (default: en)')
+        .option('--limit <n>', 'Limit number of results (default: 50)')
+        .option('--cursor <cursor>', CURSOR_DESCRIPTION)
+        .option('--all', 'Fetch all results (no limit)')
+        .option('--json', 'Output as JSON')
+        .option('--ndjson', 'Output as newline-delimited JSON')
+        .option('--ids-only', 'Output only IDs, one per line')
+        .option('--full', 'Include all fields in JSON output')
+        .action((options: ListTemplatesOptions) => listTemplates(options))
+
+    template
+        .command('view <id>')
+        .description('View a template: a gallery slug or a UT_ template ID')
+        .option('--content', 'Include its sections and tasks')
+        .option('--locale <locale>', 'Language of a gallery template (default: en)')
+        .option('--json', 'Output as JSON')
+        .option('--full', 'Include all fields in JSON output')
+        .action((id: string, options: ViewTemplateOptions) => viewTemplate(id, options))
+
+    template
+        .command('update <id>')
+        .description('Update a saved template (UT_ template ID)')
+        .option('--name <name>', 'New name')
+        .option('--description <text>', 'New description')
+        .addOption(
+            withCaseInsensitiveChoices(
+                new Option('--color <color>', 'New color'),
+                colors.map((c) => c.key),
+            ),
+        )
+        .option('--workspace <ref>', 'Move a personal template into this workspace')
+        .option('--share', 'Share a workspace template with its members')
+        .option('--no-share', 'Stop sharing a workspace template with its members')
+        .option('--from-project <ref>', "Replace the content with a project's current content")
+        .option(
+            '--content-file <path>',
+            'Replace the content with JSON from `td template view <id> --content --json`',
+        )
+        .option('--json', 'Output the updated template as JSON')
+        .option('--dry-run', 'Preview what would happen without executing')
+        .addHelpText(
+            'after',
+            `
+Replacing the content removes anything left out of it.
+
+Examples:
+  td template update UT_abc123 --name "Onboarding v2" --color lime_green
+  td template update UT_abc123 --workspace "Acme" --share
+  td template view UT_abc123 --content --json > onboarding.json   # edit, then:
+  td template update UT_abc123 --content-file onboarding.json`,
+        )
+        .action((id: string, options: UpdateTemplateOptions) => updateTemplate(id, options))
 
     // Deprecated: moved to `td project export`. Hidden, kept for one release.
     const exportFileCmd = template
@@ -120,7 +188,9 @@ Examples:
                 throw new CliError(
                     'INVALID_OPTIONS',
                     '--workspace only applies to the deprecated --file',
-                    ['A template from CSV is saved to your personal templates.'],
+                    [
+                        'A template from CSV is saved to your personal templates. Move it afterwards with: td template update <id> --workspace <ref>',
+                    ],
                 )
             }
             if (!options.description) {

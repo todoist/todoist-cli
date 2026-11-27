@@ -355,6 +355,17 @@ const FILTER_ESSENTIAL_FIELDS = [
     'isFavorite',
 ] as const
 const FOLDER_ESSENTIAL_FIELDS = ['id', 'name', 'workspaceId', 'defaultOrder', 'childOrder'] as const
+const TEMPLATE_ESSENTIAL_FIELDS = [
+    'id',
+    'name',
+    'templateType',
+    'templateSource',
+    'shortDescription',
+    'workspaceId',
+    'sharedWithWorkspaceMembers',
+    'canEdit',
+] as const
+
 const APP_ESSENTIAL_FIELDS = [
     'id',
     'clientId',
@@ -432,6 +443,9 @@ function addWebUrl<T extends { id: string }>(item: T, type: EntityType): T & { w
         case 'app':
             url = ''
             break
+        case 'template':
+            url = ''
+            break
     }
     return { ...item, webUrl: url }
 }
@@ -448,6 +462,7 @@ export type EntityType =
     | 'folder'
     | 'notification'
     | 'app'
+    | 'template'
 
 function getEssentialFields(type: EntityType): readonly string[] {
     switch (type) {
@@ -473,6 +488,8 @@ function getEssentialFields(type: EntityType): readonly string[] {
             return NOTIFICATION_ESSENTIAL_FIELDS
         case 'app':
             return APP_ESSENTIAL_FIELDS
+        case 'template':
+            return TEMPLATE_ESSENTIAL_FIELDS
     }
 }
 
