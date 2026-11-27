@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { open } from 'node:fs/promises'
 import { captureConsole, captureStream, createTestProgram } from '@todoist/cli-core/testing'
+import type { Template } from '@todoist/sdk'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('node:fs')
@@ -321,6 +322,109 @@ describe('template', () => {
             // call and this test would catch the regression.
             expect(mockGetApi).not.toHaveBeenCalled()
             expect(mockResolveWorkspaceRef).not.toHaveBeenCalled()
+        })
+    })
+
+    describe('create --from-csv', () => {
+        const saved = {
+            id: 'UT_new',
+            name: 'Onboarding',
+            workspaceId: null,
+            sharedWithWorkspaceMembers: false,
+        } as unknown as Template
+
+        beforeEach(() => {
+            vi.mocked(open).mockResolvedValue({ close: vi.fn() } as unknown as Awaited<
+                ReturnType<typeof open>
+            >)
+            vi.mocked(fs.openAsBlob).mockResolvedValue(new Blob([Buffer.from('csv content')]))
+            mockApi.addTemplate.mockResolvedValue(saved)
+        })
+
+        function run(...args: string[]) {
+            return createProgram().parseAsync(['node', 'td', 'template', 'create', ...args])
+        }
+
+        it('saves a personal template from the CSV, charcoal by default', async () => {
+            await run(
+                '--name',
+                'Onboarding',
+                '--from-csv',
+                '/tmp/onboarding.csv',
+                '--description',
+                'New hires',
+            )
+
+            const arg = mockApi.addTemplate.mock.calls[0][0]
+            expect(arg).toMatchObject({
+                name: 'Onboarding',
+                description: 'New hires',
+                color: 'charcoal',
+                fileName: 'onboarding.csv',
+            })
+            expect(await (arg.file as Blob).text()).toBe('csv content')
+            expect(mockApi.addProjectFromCsv).not.toHaveBeenCalled()
+            expect(consoleSpy).toHaveBeenCalledWith('Saved template: Onboarding')
+        })
+
+        it('uses --color and --file-name', async () => {
+            await run(
+                '--name',
+                'Onboarding',
+                '--from-csv',
+                '/tmp/onboarding.csv',
+                '--description',
+                'x',
+                '--color',
+                'lime_green',
+                '--file-name',
+                'Plan.csv',
+            )
+
+            expect(mockApi.addTemplate.mock.calls[0][0]).toMatchObject({
+                color: 'lime_green',
+                fileName: 'Plan.csv',
+            })
+        })
+
+        it('outputs the saved template with --json', async () => {
+            await run('--name', 'O', '--from-csv', '/tmp/o.csv', '--description', 'x', '--json')
+
+            expect(JSON.parse(consoleSpy.mock.calls[0][0] as string).id).toBe('UT_new')
+        })
+
+        it('previews with --dry-run without saving', async () => {
+            await run('--name', 'O', '--from-csv', '/tmp/o.csv', '--description', 'x', '--dry-run')
+
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('[dry-run]'))
+            expect(mockApi.addTemplate).not.toHaveBeenCalled()
+        })
+
+        it.each([
+            [['--name', 'O', '--description', 'x'], 'INVALID_OPTIONS'],
+            [['--name', 'O', '--from-csv', '/tmp/o.csv'], 'INVALID_OPTIONS'],
+            [
+                [
+                    '--name',
+                    'O',
+                    '--from-csv',
+                    '/tmp/o.csv',
+                    '--description',
+                    'x',
+                    '--workspace',
+                    'Acme',
+                ],
+                'INVALID_OPTIONS',
+            ],
+            [
+                ['--name', 'O', '--from-csv', '/tmp/o.csv', '--file', '/tmp/o.csv'],
+                'CONFLICTING_OPTIONS',
+            ],
+            [['--name', 'O', '--file', '/tmp/o.csv', '--description', 'x'], 'INVALID_OPTIONS'],
+        ])('rejects %j with %s and saves nothing', async (args, code) => {
+            await expect(run(...args)).rejects.toMatchObject({ code })
+            expect(mockApi.addTemplate).not.toHaveBeenCalled()
+            expect(mockApi.addProjectFromCsv).not.toHaveBeenCalled()
         })
     })
 
