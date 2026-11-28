@@ -2,7 +2,13 @@ import { outputIds, resolveOutputMode } from '@todoist/cli-core'
 import chalk from 'chalk'
 import { getAccountTimezone, getApi, type Project, type Task } from '../../lib/api/core.js'
 import { CollaboratorCache, formatAssignee } from '../../lib/collaborators.js'
-import { addDays, formatDateInTimezone, parseDateOption } from '../../lib/dates.js'
+import {
+    addDays,
+    formatDateInTimezone,
+    parseDateOption,
+    startOfDayInTimezone,
+    toApiInstant,
+} from '../../lib/dates.js'
 import { CliError } from '../../lib/errors.js'
 import type { PaginatedViewOptions } from '../../lib/options.js'
 import {
@@ -71,11 +77,10 @@ export async function listCompleted(options: CompletedListOptions): Promise<void
           ? parseInt(options.limit, 10)
           : LIMITS.tasks
 
-    // The API reads the range in the account's time zone, so default it to the account's today.
-    const today =
-        isSearch || (options.since && options.until)
-            ? undefined
-            : formatDateInTimezone(new Date(), await getAccountTimezone())
+    // The days are the account's: today by default, and each day starting at the account's
+    // midnight. The API reads a bare date as UTC midnight, so the days are sent as instants.
+    const timezone = isSearch ? undefined : await getAccountTimezone()
+    const today = isSearch ? undefined : formatDateInTimezone(new Date(), timezone)
     const since = isSearch ? undefined : (options.since ?? today)
     const until = isSearch ? undefined : (options.until ?? (today && addDays(today, 1)))
 
@@ -102,8 +107,8 @@ export async function listCompleted(options: CompletedListOptions): Promise<void
                 return { results: resp.items, nextCursor: resp.nextCursor }
             }
             const resp = await api.getCompletedTasksByCompletionDate({
-                since: since!,
-                until: until!,
+                since: toApiInstant(startOfDayInTimezone(since!, timezone)),
+                until: toApiInstant(startOfDayInTimezone(until!, timezone)),
                 projectId,
                 cursor: cursor ?? undefined,
                 limit,

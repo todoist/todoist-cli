@@ -71,8 +71,8 @@ describe('completed command', () => {
 
         expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
             expect.objectContaining({
-                since: getToday(),
-                until: getTomorrow(),
+                since: `${getToday()}T00:00:00Z`,
+                until: `${getTomorrow()}T00:00:00Z`,
             }),
         )
     })
@@ -91,22 +91,85 @@ describe('completed command', () => {
             await createProgram().parseAsync(['node', 'td', 'completed'])
 
             expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
-                expect.objectContaining({ since: '2026-11-24', until: '2026-11-25' }),
+                expect.objectContaining({
+                    since: '2026-11-24T06:00:00Z',
+                    until: '2026-11-25T06:00:00Z',
+                }),
             )
         })
 
-        it('does not look up the time zone when --since and --until are both given', async () => {
+        it("asks for the account's evening completions, not the UTC day", async () => {
+            // The API reads a bare date as UTC midnight, which for Chicago is 6 PM the day
+            // before: a task finished at 8 PM on the 24th would fall outside the 24th.
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/Chicago')
+
             await createProgram().parseAsync([
                 'node',
                 'td',
                 'completed',
                 '--since',
-                '2026-08-01',
+                '2026-11-24',
                 '--until',
-                '2026-08-07',
+                '2026-11-25',
             ])
 
-            expect(getAccountTimezone).not.toHaveBeenCalled()
+            expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    since: '2026-11-24T06:00:00Z',
+                    until: '2026-11-25T06:00:00Z',
+                }),
+            )
+        })
+
+        it("starts each day where the account's clock does across a clock change", async () => {
+            // New York's clocks go forward at 2 AM on 8 March 2026, so the 9th starts an hour
+            // earlier in UTC than the 8th did.
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/New_York')
+
+            await createProgram().parseAsync([
+                'node',
+                'td',
+                'completed',
+                '--since',
+                '2026-03-08',
+                '--until',
+                '2026-03-09',
+            ])
+
+            expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    since: '2026-03-08T05:00:00Z',
+                    until: '2026-03-09T04:00:00Z',
+                }),
+            )
+        })
+
+        it('shows the days typed in the heading, not the instants sent', async () => {
+            vi.mocked(getAccountTimezone).mockResolvedValueOnce('America/Chicago')
+            mockApi.getCompletedTasksByCompletionDate.mockResolvedValue({
+                items: [
+                    { id: 'task-1', content: 'Evening task', projectId: 'proj-1', priority: 1 },
+                ],
+                nextCursor: null,
+            })
+            mockApi.getProjects.mockResolvedValue({
+                results: [{ id: 'proj-1', name: 'Work' }],
+                nextCursor: null,
+            })
+
+            await createProgram().parseAsync([
+                'node',
+                'td',
+                'completed',
+                '--since',
+                '2026-11-24',
+                '--until',
+                '2026-11-25',
+            ])
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Completed (1) - 2026-11-24 to 2026-11-25'),
+            )
         })
     })
 
@@ -125,8 +188,8 @@ describe('completed command', () => {
 
         expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
             expect.objectContaining({
-                since: '2024-01-01',
-                until: '2024-01-08',
+                since: '2024-01-01T00:00:00Z',
+                until: '2024-01-08T00:00:00Z',
             }),
         )
     })
@@ -169,8 +232,8 @@ describe('completed command', () => {
 
         expect(mockApi.getCompletedTasksByCompletionDate).toHaveBeenCalledWith(
             expect.objectContaining({
-                since: '2026-01-01',
-                until: '2026-04-04',
+                since: '2026-01-01T00:00:00Z',
+                until: '2026-04-04T00:00:00Z',
             }),
         )
     })
@@ -542,6 +605,7 @@ describe('completed command', () => {
                 expect.objectContaining({ query: 'meeting' }),
             )
             expect(mockApi.getCompletedTasksByCompletionDate).not.toHaveBeenCalled()
+            expect(getAccountTimezone).not.toHaveBeenCalled()
             expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('search: "meeting"'))
         })
 

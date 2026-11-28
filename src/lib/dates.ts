@@ -170,6 +170,11 @@ export function startOfDayInTimezone(day: string, timeZone?: string): Date {
     )
 }
 
+/** An instant as the API takes it, in UTC to the second: `2025-01-01T06:00:00Z`. */
+export function toApiInstant(instant: Date): string {
+    return instant.toISOString().replace(/\.\d{3}Z$/, 'Z')
+}
+
 /** The `YYYY-MM-DD` day `days` calendar days after `day`, or before it when `days` is negative. */
 export function addDays(day: string, days: number): string {
     return format(addCalendarDays(parseISO(day), days), 'yyyy-MM-dd')

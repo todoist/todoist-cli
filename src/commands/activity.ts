@@ -10,7 +10,7 @@ import { Command, Option } from 'commander'
 import { getAccountTimezone, getApi, getCurrentUserId, type Project } from '../lib/api/core.js'
 import { withCaseInsensitiveChoices } from '../lib/completion.js'
 import { CURSOR_DESCRIPTION } from '../lib/constants.js'
-import { addDays, parseDateOption, startOfDayInTimezone } from '../lib/dates.js'
+import { addDays, parseDateOption, startOfDayInTimezone, toApiInstant } from '../lib/dates.js'
 import { CliError } from '../lib/errors.js'
 import type { Pagination } from '../lib/options.js'
 import { formatPaginatedJson, formatPaginatedNdjson } from '../lib/output.js'
@@ -130,11 +130,6 @@ function formatActivityRow(
 // The API refuses a range longer than this.
 const MAX_RANGE_DAYS = 365
 const DAY_MS = 24 * 60 * 60 * 1000
-
-/** An instant as the API takes it, in UTC to the second: `2025-01-01T06:00:00Z`. */
-function toApiInstant(instant: Date): string {
-    return instant.toISOString().replace(/\.\d{3}Z$/, 'Z')
-}
 
 /** Checks `--since` and `--until` are dates, in order, before any request is made. */
 function checkDateFlags(since: string | undefined, until: string | undefined): void {
